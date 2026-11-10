@@ -35,7 +35,7 @@ uniform float masked;
 varying vec2 vBand;
 void main() {
   vec4 m = texture2D(mask, vBand) * masked * step(0.0, vBand.y) * step(vBand.y, 1.0);
-  gl_FragColor = vec4(mix(mix(body, inkA, m.r), inkB, m.g), 1.0);
+  gl_FragColor = vec4(body * (1.0 - m.r - m.g) + inkA * m.r + inkB * m.g, 1.0);
   #include <colorspace_fragment>
 }`
 

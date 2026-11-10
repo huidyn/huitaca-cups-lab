@@ -263,6 +263,7 @@
     ],
     "handle": null,
     "face": { "surface": "body", "centerY": 1.03, "width": 0.92, "height": 0.72, "eyeWidth": 0.17, "eyeHeight": 0.37, "separation": 0.39, "color": "eyes" },
+    "pattern": { "surface": "body", "from": 0.18, "to": 0.84 },
     "anchors": { "top": [0,1.85,0] }
   },
   {

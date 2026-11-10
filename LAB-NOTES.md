@@ -1,5 +1,32 @@
 # Huitaca Cups lab
 
+## Kulhad pattern study
+
+- India / Kulhad joins Designs with a floral fan, two triangle rows and a
+  leafy vine, preserving the supplied illustration's three motif families.
+  [Sources, pigments and adaptation notes](docs/kulhad-patterns.md).
+- The later pottery photograph guides the subdued palette: red earth
+  `#b26443`, warm cream `#e5d9bd` and olive-charcoal `#454638`. Khamir and
+  Gaatha describe geru, khari mitt and black stone/clay-based decoration,
+  not a documented green pigment. These flat colours are approximations.
+- At most two decorative inks are used. The rim stays terracotta by
+  Alessandro's choice; the painted dark rim of the reference object is not
+  treated as a standard kulhad feature. Grey Shapes remain unchanged.
+- Only the decorated face moves to Y=1.22. The Y=0.18–0.84 band leaves
+  0.195 units below the eyes. Geometry and draw-pass counts do not change.
+- The first distinct two-ink collection exposed a coverage error in the
+  shared shader. Direct channel weights replace sequential mixes, which
+  leaked body colour between two inks. A real 64px PNG-export check covers
+  body, each solid ink and a fully covered mixed edge: maximum RGB-channel
+  error falls from 32 to 1 against independently calculated sRGB values.
+- All three 512px fallbacks use the real renderer. Native 64px images were
+  inspected; live pattern selection and keyboard turning (15°, Home=0°)
+  were checked. Masks measure 768 × 140 at 512px and 2048 × 374 at the cap.
+  Resolution settings, DPR limit, lighting-free and on-demand drawing
+  remain unchanged. These are rendering checks, not hardware benchmarks.
+- Final verification: 343 tests across 20 files, strict TypeScript and the
+  production build pass. All three built fallbacks match their 512px sources.
+
 ## Çay glass pattern study
 
 - Türkiye / Çay glass joins Designs with eight-point stars, diamond lattice

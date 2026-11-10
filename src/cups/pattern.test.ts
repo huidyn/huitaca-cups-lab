@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { Mesh, ShaderMaterial, Color } from 'three'
 import { vessels } from './catalogue'
 import { createCup } from './geometry'
-import { cayDesigns, colombianDesigns, designCollections, designColors, gaiwanDesigns, yunomiDesigns } from './designs'
+import { cayDesigns, colombianDesigns, designCollections, designColors, gaiwanDesigns, kulhadColors, kulhadDesigns, yunomiDesigns } from './designs'
 import { bandLayout, designSvg, MASK_INKS, maskWidth } from './pattern'
 import { maskDimensions } from './renderer'
 
@@ -89,8 +89,8 @@ describe('bold recolourable yunomi patterns', () => {
 
 describe('cultural pattern collections', () => {
   it('provides three designs per culture and keeps the grey source vessels unchanged', () => {
-    expect(designCollections.map(option => option.vessel.id)).toEqual(['yunomi', 'gaiwan', 'colombian-mug', 'cay-glass'])
-    expect(new Set(designCollections.flatMap(option => option.designs.map(design => design.id))).size).toBe(12)
+    expect(designCollections.map(option => option.vessel.id)).toEqual(['yunomi', 'gaiwan', 'colombian-mug', 'cay-glass', 'kulhad'])
+    expect(new Set(designCollections.flatMap(option => option.designs.map(design => design.id))).size).toBe(15)
     for (const option of designCollections) {
       expect(option.designs).toHaveLength(3)
       expect(option.vessel.colors.body).toBe(option.colors.background)
@@ -302,4 +302,74 @@ describe('cultural pattern collections', () => {
     }
     expect(cayDesigns[2]!.previewCenter).toBe(0)
   })
+  it.each(kulhadDesigns)('$name uses two sourced earth-coloured inks and periodic copies', design => {
+    const vessel = designCollections.find(option => option.id === 'india')!.vessel
+    const size = maskDimensions(vessel, 100, 2048)
+    const drawing = design.draw(size.viewWidth, size.viewHeight)
+    const svg = designSvg(drawing, size.viewWidth, size.viewHeight, [size.width, size.height], MASK_INKS)
+    expect(svg).toContain('#f00')
+    expect(svg).toContain('#0f0')
+    expect(svg).not.toMatch(/var\(|NaN|undefined|<image|<text|filter=/)
+    expect(drawing).toMatch(/translate\(-/)
+    expect([...new Set([...drawing.matchAll(/var\(--([^)]+)\)/g)].map(match => match[1]))].sort())
+      .toEqual(design.id === 'kulhad-floral' ? ['body', 'ink-a', 'ink-b'] : ['ink-a', 'ink-b'])
+    expect(design.sources.map(source => new URL(source.url).hostname)).toEqual(['www.khamir.org', 'gaatha.org'])
+    const coloured = designSvg(drawing, size.viewWidth, size.viewHeight, [size.width, size.height], kulhadColors)
+    expect(coloured).toContain('#e5d9bd')
+    expect(coloured).toContain('#454638')
+    expect(coloured).not.toMatch(/#f39a1f|#2b3a67|#4f7a3a/i)
+  })
+
+  it('retains rounded flower fans, two offset triangle rows and a broad four-leaf vine', () => {
+    expect(kulhadDesigns.map(design => design.id)).toEqual(['kulhad-floral', 'kulhad-triangles', 'kulhad-vine'])
+    const flower = kulhadDesigns[0]!.draw(6000, 500)
+    expect(flower.match(/transform="rotate\(/g)).toHaveLength(42)
+    expect(flower.match(/A 100 100 0 0 1 100 0 Z/g)).toHaveLength(6)
+    expect(flower).toContain('0 -390 C 72.5 -390')
+    const triangles = kulhadDesigns[1]!.draw(6000, 500)
+    expect(triangles.match(/<polygon /g)).toHaveLength(16)
+    expect(triangles).toContain('points="-460,230 0,30 460,230"')
+    expect(triangles).toContain('points="40,270 960,270 500,470"')
+    const vine = kulhadDesigns[2]!.draw(4800, 500)
+    const groups = [...vine.matchAll(/<g [^>]+>(.*?)<\/g>/g)]
+    expect(groups).toHaveLength(6)
+    for (const group of groups) {
+      expect(group[1]!.match(/<path /g)).toHaveLength(5)
+      expect(group[1]).toContain('stroke-width="50"')
+      expect(group[1]).toContain('M -600 260 C -200 310 200 190 600 260')
+    }
+  })
+
+  it('adds the kulhad band without extra meshes or changing the grey vessel or its face', () => {
+    const vessel = designCollections.find(option => option.id === 'india')!.vessel
+    const original = vessels.find(option => option.id === 'kulhad')!
+    expect(original.colors.body).toBe('#959693')
+    expect(original.face.centerY).toBe(1.03)
+    expect(vessel.face.centerY).toBe(1.22)
+    expect(vessel.pattern).toEqual({ surface: 'body', from: 0.18, to: 0.84 })
+    expect(vessel.face.centerY - vessel.face.eyeHeight / 2 - vessel.pattern!.to).toBeCloseTo(0.195)
+    expect(vessel.colors.rim).toBe(kulhadColors.body)
+    expect(vessel.colors.eyes).toBe(kulhadColors.inkA)
+    const plain = createCup(original)
+    const decorated = createCup(vessel, { pattern: true })
+    try {
+      expect(decorated.root.children.length).toBe(plain.root.children.length)
+      const before = plain.root.getObjectByName('body') as Mesh
+      const after = decorated.root.getObjectByName('body') as Mesh
+      expect(after.geometry.attributes.position!.count).toBe(before.geometry.attributes.position!.count)
+      const uniforms = (after.material as ShaderMaterial).uniforms
+      expect(uniforms.inkA!.value).toEqual(new Color(kulhadColors.inkA))
+      expect(uniforms.inkB!.value).toEqual(new Color(kulhadColors.inkB))
+      // La somme des couvertures, pas deux mélanges successifs : aucun fond aux jonctions A/B.
+      expect((after.material as ShaderMaterial).fragmentShader)
+        .toContain('body * (1.0 - m.r - m.g) + inkA * m.r + inkB * m.g')
+      const size = maskDimensions(vessel, 10000, 2048)
+      expect(size.width).toBe(2048)
+      expect(size.height).toBeLessThan(512)
+    } finally {
+      plain.dispose()
+      decorated.dispose()
+    }
+  })
+
 })

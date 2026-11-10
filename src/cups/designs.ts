@@ -307,6 +307,76 @@ export const cayDesigns: CupDesign[] = [
   }
 ]
 
+const KHAVDA_SOURCES = [
+  { title: 'Khamir · Kachchh pottery, white clay and black stone paints', url: 'https://www.khamir.org/crafts/pottery' },
+  { title: 'Gaatha · Khavda pottery, geru, khari mitt and painted motifs', url: 'https://gaatha.org/Craft-of-India/khavda-pottery-kutch-gujarat/' }
+]
+
+// Équivalents plats choisis d'après la photo, pas des valeurs normalisées de pigments.
+export const kulhadColors: Record<string, string> & DesignInks = {
+  body: '#b26443', inside: '#77402d', rim: '#b26443', eyes: '#e5d9bd',
+  background: '#b26443', inkA: '#e5d9bd', inkB: '#454638'
+}
+
+export const kulhadDesigns: CupDesign[] = [
+  {
+    id: 'kulhad-floral',
+    name: 'Floral fan',
+    nativeName: 'Khavda-inspired floral study',
+    note: 'Seven broad, rounded petals and a dark semicircular centre retain the supplied illustration’s flower fan. Cream and olive-charcoal replace its bright ochre, following the photographed pottery and Khavda’s documented white and black paints. A contemporary composition, not a named traditional motif.',
+    sources: KHAVDA_SOURCES,
+    draw(width, height) {
+      const length = height * 0.78
+      const w = height * 0.145
+      const centre = height * 0.2
+      return around(width, 4, 0, x =>
+        `<g transform="translate(${n(x)} ${n(height * 0.92)})" fill="var(--ink-a)" stroke="var(--body)" stroke-width="${n(height * 0.06)}" stroke-linejoin="round">`
+        + [-72, 72, -48, 48, -24, 24, 0].map(angle =>
+          `<path transform="rotate(${angle})" d="M 0 0 C ${n(-w)} ${n(-length * 0.24)} ${n(-w)} ${n(-length)} 0 ${n(-length)} C ${n(w)} ${n(-length)} ${n(w)} ${n(-length * 0.24)} 0 0 Z"/>`).join('')
+        + `<path d="M ${n(-centre)} 0 A ${n(centre)} ${n(centre)} 0 0 1 ${n(centre)} 0 Z" fill="var(--ink-b)"/>`
+        + '</g>')
+    }
+  },
+  {
+    id: 'kulhad-triangles',
+    name: 'Triangle band',
+    nativeName: 'Khavda-inspired geometric study',
+    note: 'Two offset rows of large, filled triangles preserve the illustration’s geometric band. Olive-charcoal on warm cream replaces indigo and bright ivory. Khavda’s painted geometric families provide context, not proof that this exact arrangement belongs to one community.',
+    sources: KHAVDA_SOURCES,
+    draw(width, height) {
+      const period = width / 6
+      return `<rect width="${n(width)}" height="${n(height)}" fill="var(--ink-a)"/>`
+        + around(width, 6, 0, x =>
+          `<g transform="translate(${n(x)} 0)" fill="var(--ink-b)">`
+          + `<polygon points="${n(-period * 0.46)},${n(height * 0.46)} 0,${n(height * 0.06)} ${n(period * 0.46)},${n(height * 0.46)}"/>`
+          + `<polygon points="${n(period * 0.04)},${n(height * 0.54)} ${n(period * 0.96)},${n(height * 0.54)} ${n(period / 2)},${n(height * 0.94)}"/>`
+          + '</g>')
+    }
+  },
+  {
+    id: 'kulhad-vine',
+    name: 'Leafy vine',
+    nativeName: 'Khavda-inspired foliage study',
+    note: 'Broad pointed leaves grow from a gently curving stem, retaining the supplied illustration’s leafy band without fine veins. The dark olive-charcoal appearance interprets photographed black clay-based decoration, not a documented green pigment. A modern botanical study, not a sacred or community-specific symbol.',
+    sources: KHAVDA_SOURCES,
+    draw(width, height) {
+      const period = width / 4
+      const leaf = (start: number, down: boolean) => {
+        const x = period * start
+        const y = (value: number) => height * (down ? 1 - value : value)
+        return `<path d="M ${n(x)} ${n(height / 2)} C ${n(x + period * 0.02)} ${n(y(0.24))} ${n(x + period * 0.17)} ${n(y(0.06))} ${n(x + period * 0.3)} ${n(y(0.1))} C ${n(x + period * 0.3)} ${n(y(0.35))} ${n(x + period * 0.16)} ${n(y(0.51))} ${n(x)} ${n(height / 2)} Z"/>`
+      }
+      return `<rect width="${n(width)}" height="${n(height)}" fill="var(--ink-a)"/>`
+        + around(width, 4, 0, x =>
+          `<g transform="translate(${n(x)} 0)" fill="var(--ink-b)">`
+          + `<path d="M ${n(-period / 2)} ${n(height * 0.52)} C ${n(-period / 6)} ${n(height * 0.62)} ${n(period / 6)} ${n(height * 0.38)} ${n(period / 2)} ${n(height * 0.52)}" fill="none" stroke="var(--ink-b)" stroke-width="${n(height * 0.1)}" stroke-linecap="round"/>`
+          + [-0.34, 0.1].map(start => leaf(start, false)).join('')
+          + [-0.28, 0.16].map(start => leaf(start, true)).join('')
+          + '</g>')
+    }
+  }
+]
+
 export interface DesignCollection {
   id: string
   label: string
@@ -331,5 +401,6 @@ export const designCollections: DesignCollection[] = [
   { id: 'japan', label: 'Japan · Yunomi', vessel: decoratedVessel('yunomi', designColors, 1.12), colors: designColors, colorDescription: 'cream on navy', designs: yunomiDesigns },
   { id: 'china', label: 'China · Gaiwan', vessel: decoratedVessel('gaiwan', gaiwanColors, 1), colors: gaiwanColors, colorDescription: 'blue on ivory', designs: gaiwanDesigns },
   { id: 'colombia', label: 'Colombia · Clay mug', vessel: decoratedVessel('colombian-mug', colombianColors, 1.16), colors: colombianColors, colorDescription: 'cream on terracotta', designs: colombianDesigns },
-  { id: 'turkiye', label: 'Türkiye · Çay glass', vessel: decoratedVessel('cay-glass', cayColors, 1.22), colors: cayColors, colorDescription: 'cream on turquoise with a gold rim', designs: cayDesigns }
+  { id: 'turkiye', label: 'Türkiye · Çay glass', vessel: decoratedVessel('cay-glass', cayColors, 1.22), colors: cayColors, colorDescription: 'cream on turquoise with a gold rim', designs: cayDesigns },
+  { id: 'india', label: 'India · Kulhad', vessel: decoratedVessel('kulhad', kulhadColors, 1.22), colors: kulhadColors, colorDescription: 'warm cream and olive-charcoal on red earth', designs: kulhadDesigns }
 ]
