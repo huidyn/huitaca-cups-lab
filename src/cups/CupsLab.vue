@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { vessels } from './catalogue'
-import { designColors, yunomiDesigns } from './designs'
+import { designCollections } from './designs'
 import { palette } from './palette'
 import { bandLayout, designSvg } from './pattern'
 import type { createCupGallery } from './renderer'
@@ -11,7 +11,7 @@ type Study = 'shapes' | 'colours' | 'designs'
 const STUDIES: Record<Study, { number: string; label: string; eyebrow: string; title: string; description: string }> = {
   shapes: { number: '01', label: 'Shapes', eyebrow: 'STUDY 01 / FORM', title: 'A little character.', description: 'Eighteen shapes. Two eyes. Nothing extra.' },
   colours: { number: '02', label: 'Colours', eyebrow: 'STUDY 02 / COLOUR', title: 'Find its colour.', description: 'One shape. Twelve colours. Pick one to try it.' },
-  designs: { number: '03', label: 'Designs', eyebrow: 'STUDY 03 / PATTERN', title: 'Give it a pattern.', description: 'One yunomi. Three Japanese patterns. Drag the cup to turn it.' }
+  designs: { number: '03', label: 'Designs', eyebrow: 'STUDY 03 / PATTERN', title: 'Give it a pattern.', description: 'Choose a culture. Three patterns per vessel. Drag the cup to turn it.' }
 }
 
 const canvas = ref<HTMLCanvasElement>()
@@ -21,11 +21,16 @@ const theme = ref<'light' | 'dark'>('light')
 const selected = ref('terracotta')
 const colour = computed(() => palette.find(option => option.id === selected.value)!)
 const preview = computed(() => ({ ...vessels[0]!, colors: { ...colour.value.colors } }))
-const yunomi = vessels.find(vessel => vessel.id === 'yunomi')!
-const designVessel = { ...yunomi, face: { ...yunomi.face, centerY: 1.12 }, colors: { ...designColors } }
-const designId = ref(yunomiDesigns[0]!.id)
-const design = computed(() => yunomiDesigns.find(option => option.id === designId.value)!)
-const shownVessels = computed(() => study.value === 'shapes' ? vessels : study.value === 'colours' ? [preview.value] : [designVessel])
+const cultureId = ref(designCollections[0]!.id)
+const collection = computed(() => designCollections.find(option => option.id === cultureId.value)!)
+const designVessel = computed(() => collection.value.vessel)
+const chosenDesigns = ref(Object.fromEntries(designCollections.map(option => [option.id, option.designs[0]!.id])))
+const designId = computed({
+  get: () => chosenDesigns.value[cultureId.value]!,
+  set: (value: string) => { chosenDesigns.value[cultureId.value] = value }
+})
+const design = computed(() => collection.value.designs.find(option => option.id === designId.value)!)
+const shownVessels = computed(() => study.value === 'shapes' ? vessels : study.value === 'colours' ? [preview.value] : [designVessel.value])
 const single = computed(() => study.value !== 'shapes')
 const turning = ref(false)
 const elevation = ref(16)
@@ -39,20 +44,20 @@ const elevationRange = computed(() => study.value === 'designs' ? [-20, 60] : [0
 const culturalVessels = vessels.filter(vessel => vessel.heritage)
 const culturalStart = vessels.findIndex(vessel => vessel.heritage)
 let gallery: ReturnType<typeof createCupGallery> | undefined
+let galleryVesselId: string | undefined
 let disposed = false
 let media: MediaQueryList
 
 // Vignette du motif à plat, centrée sous le visage, dans les vraies couleurs.
-const thumbnails = ref<Record<string, string>>({})
-function drawThumbnails() {
-  const band = designVessel.pattern!
-  const part = designVessel.parts.find(part => part.id === band.surface)!
+const thumbnails = computed(() => {
+  const band = designVessel.value.pattern!
+  const part = designVessel.value.parts.find(part => part.id === band.surface)!
   const layout = bandLayout(part.outline, band)
   const size = { viewWidth: Math.round(layout.circumference * 1000), viewHeight: Math.round(layout.length * 1000) }
   const view: [number, number, number, number] = [-size.viewWidth * 0.12, 0, size.viewWidth * 0.24, size.viewHeight]
-  thumbnails.value = Object.fromEntries(yunomiDesigns.map(option => [option.id,
-    `data:image/svg+xml;charset=utf-8,${encodeURIComponent(designSvg(option.draw(size.viewWidth, size.viewHeight), size.viewWidth, size.viewHeight, [120, 84], designColors, view))}`]))
-}
+  return Object.fromEntries(collection.value.designs.map(option => [option.id,
+    `data:image/svg+xml;charset=utf-8,${encodeURIComponent(designSvg(option.draw(size.viewWidth, size.viewHeight), size.viewWidth, size.viewHeight, [120, 84], collection.value.colors, view))}`]))
+})
 
 async function syncMotion() {
   reduced.value = media.matches
@@ -73,6 +78,7 @@ async function syncMotion() {
       gallery = createCupGallery(canvas.value, shownVessels.value.map((vessel, i) => ({
         vessel, element: elements[i]!, design: designs ? design.value : undefined
       })), { turntable: designs, onTurn: degrees => { turn.value = degrees } })
+      galleryVesselId = designs ? designVessel.value.id : undefined
       gallery.setElevation(elevation.value)
       ready.value = true
     } catch {
@@ -87,11 +93,13 @@ watch(selected, () => {
   if (study.value === 'colours') gallery?.setColors(0, preview.value.colors)
 })
 watch(design, () => {
-  if (study.value === 'designs') gallery?.setDesign(0, design.value)
+  if (study.value === 'designs' && galleryVesselId === designVessel.value.id) gallery?.setDesign(0, design.value)
 })
-watch(study, async () => {
+watch([study, cultureId], async ([currentStudy], [previousStudy]) => {
+  if (currentStudy === previousStudy && currentStudy !== 'designs') return
   gallery?.dispose()
   gallery = undefined
+  galleryVesselId = undefined
   turning.value = false
   turn.value = 0
   const [min, max] = elevationRange.value
@@ -112,7 +120,7 @@ function changeElevation(event: Event) {
 }
 
 function label(vessel: typeof vessels[number]) {
-  if (study.value === 'designs') return `${vessel.name} with the ${design.value.name.toLowerCase()} pattern, cream on navy, turned ${turn.value} degrees`
+  if (study.value === 'designs') return `${vessel.name} with the ${design.value.name.toLowerCase()} pattern, ${collection.value.colorDescription}, turned ${turn.value} degrees`
   return `${vessel.name}, ${study.value === 'shapes' ? 'grey' : colour.value.name} with ${vessel.colors.eyes === '#1c1c1a' ? 'dark' : 'white'} eyes${vessel.lid || vessel.parts.some(part => part.id === 'lid') ? ' and a lid' : ' and a dark interior'}`
 }
 
@@ -128,7 +136,6 @@ onMounted(() => {
   media = matchMedia('(prefers-reduced-motion: reduce)')
   media.addEventListener('change', syncMotion)
   void syncMotion()
-  drawThumbnails()
 })
 
 onUnmounted(() => {
@@ -201,17 +208,24 @@ onUnmounted(() => {
             <p class="palette-note">The inside, rim and eyes follow your choice.</p>
           </fieldset>
 
-          <fieldset v-if="study === 'designs'" class="palette-picker design-picker">
-            <legend>Pattern</legend>
-            <div class="design-options">
-              <label v-for="option in yunomiDesigns" :key="option.id" class="palette-option design-option" :class="{ 'is-selected': designId === option.id }">
-                <input v-model="designId" type="radio" name="cup-design" :value="option.id" :aria-label="option.name" />
-                <img class="design-swatch" :src="thumbnails[option.id]" alt="" width="120" height="84" />
-                <span>{{ option.name }}<small>{{ option.japanese }}</small></span>
-              </label>
-            </div>
+          <div v-if="study === 'designs'" class="palette-picker design-picker">
+            <label class="culture-control">Culture / vessel
+              <select v-model="cultureId" aria-label="Culture / vessel">
+                <option v-for="option in designCollections" :key="option.id" :value="option.id">{{ option.label }}</option>
+              </select>
+            </label>
+            <fieldset class="palette-picker">
+              <legend>Pattern</legend>
+              <div class="design-options">
+                <label v-for="option in collection.designs" :key="option.id" class="palette-option design-option" :class="{ 'is-selected': designId === option.id }">
+                  <input v-model="designId" type="radio" name="cup-design" :value="option.id" :aria-label="option.name" />
+                  <img class="design-swatch" :src="thumbnails[option.id]" alt="" width="120" height="84" />
+                  <span>{{ option.name }}<small>{{ option.nativeName }}</small></span>
+                </label>
+              </div>
+            </fieldset>
             <p class="palette-note">Bold shapes for small avatars. One ink on the body, with colours kept separate from the pattern.</p>
-          </fieldset>
+          </div>
         </div>
 
         <details v-if="study === 'shapes'" class="culture-sources">
@@ -234,8 +248,8 @@ onUnmounted(() => {
         <details v-if="study === 'designs'" class="culture-sources">
           <summary>Pattern notes &amp; sources</summary>
           <dl>
-            <template v-for="option in yunomiDesigns" :key="option.id">
-              <dt>{{ option.name }} · {{ option.japanese }}</dt>
+            <template v-for="option in collection.designs" :key="option.id">
+              <dt>{{ option.name }} · {{ option.nativeName }}</dt>
               <dd>
                 <p>{{ option.note }}</p>
                 <ul>

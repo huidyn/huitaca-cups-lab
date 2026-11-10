@@ -79,6 +79,8 @@ a { color: inherit; }
 .colour-swatch { display: block; width: 28px; height: 28px; flex-shrink: 0; border-radius: 50%; border: 1px solid rgb(128 128 128 / 0.25); }
 .palette-option small { display: block; margin-top: 4px; color: var(--lab-muted); font-size: 9px; letter-spacing: 0.3px; }
 .design-options { display: grid; gap: 8px; }
+.culture-control { display: grid; gap: 12px; margin-bottom: 28px; font-size: 14px; font-weight: 600; }
+.culture-control select { width: 100%; min-width: 0; border: 1px solid var(--lab-border); border-radius: 5px; padding: 10px; background: var(--lab-bg); color: var(--lab-text); font: inherit; font-size: 13px; font-weight: 400; cursor: pointer; }
 .design-option { gap: 14px; font-size: 13px; }
 .design-swatch { display: block; width: 72px; height: 50px; flex-shrink: 0; border-radius: 4px; }
 .cup-viewport.is-turntable { cursor: grab; touch-action: none; border-radius: 8px; }

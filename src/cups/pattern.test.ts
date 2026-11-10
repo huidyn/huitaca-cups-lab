@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { Mesh, ShaderMaterial, Color } from 'three'
 import { vessels } from './catalogue'
 import { createCup } from './geometry'
-import { designColors, yunomiDesigns } from './designs'
+import { designCollections, designColors, gaiwanDesigns, yunomiDesigns } from './designs'
 import { bandLayout, designSvg, MASK_INKS, maskWidth } from './pattern'
 import { maskDimensions } from './renderer'
 
@@ -84,5 +84,67 @@ describe('bold recolourable yunomi patterns', () => {
     } finally {
       cup.dispose()
     }
+  })
+})
+
+describe('cultural pattern collections', () => {
+  it('provides three designs per culture and keeps the grey source vessels unchanged', () => {
+    expect(designCollections.map(option => option.vessel.id)).toEqual(['yunomi', 'gaiwan'])
+    expect(new Set(designCollections.flatMap(option => option.designs.map(design => design.id))).size).toBe(6)
+    for (const option of designCollections) {
+      expect(option.designs).toHaveLength(3)
+      expect(option.vessel.colors.body).toBe(option.colors.background)
+      const original = vessels.find(vessel => vessel.id === option.vessel.id)!
+      expect(original.colors.body).toBe('#959693')
+      expect(option.vessel.face.centerY).toBeGreaterThan(original.face.centerY)
+      expect(option.vessel.face.centerY - option.vessel.face.eyeHeight / 2 - option.vessel.pattern!.to).toBeGreaterThan(0.12)
+      for (const part of original.parts) expect(option.vessel.parts.find(p => p.id === part.id)!.outline).toEqual(part.outline)
+    }
+    expect(vessels.find(v => v.id === 'gaiwan')!.parts.find(p => p.id === 'lid-knob')!.color).toBe('body')
+  })
+
+  it.each(gaiwanDesigns)('$name stays bold, periodic, colour-independent and sourced', design => {
+    const gaiwan = designCollections[1]!.vessel
+    const size = maskDimensions(gaiwan, 100, 2048)
+    const drawing = design.draw(size.viewWidth, size.viewHeight)
+    const svg = designSvg(drawing, size.viewWidth, size.viewHeight, [size.width, size.height], MASK_INKS)
+    expect(svg).toContain('#f00')
+    expect(svg).not.toMatch(/var\(|NaN|undefined|#2f4a8a/)
+    expect(drawing).toMatch(/translate\(-/)
+    expect(drawing).not.toMatch(/<image|<text|filter=/)
+    expect(design.sources.length).toBeGreaterThanOrEqual(2)
+    expect(design.nativeName).toMatch(/[\u4e00-\u9fff]/)
+  })
+
+  it('adds no meshes or vertices to the gaiwan and keeps ink changes in shader uniforms', () => {
+    const vessel = designCollections[1]!.vessel
+    const plain = createCup(vessel)
+    const decorated = createCup(vessel, { pattern: true })
+    try {
+      expect(decorated.root.children.length).toBe(plain.root.children.length)
+      const a = plain.root.getObjectByName('body') as Mesh
+      const b = decorated.root.getObjectByName('body') as Mesh
+      expect(b.geometry.attributes.position!.count).toBe(a.geometry.attributes.position!.count)
+      expect(b.material).toBeInstanceOf(ShaderMaterial)
+      const shader = b.material as ShaderMaterial
+      decorated.setColors({ inkA: '#bd321f', body: '#e5dfd1' })
+      expect(shader.uniforms.inkA!.value).toEqual(new Color('#bd321f'))
+      expect(shader.uniforms.body!.value).toEqual(new Color('#e5dfd1'))
+      const uv = b.geometry.attributes.uv!
+      const rows = vessel.parts.find(part => part.id === 'body')!.outline.length
+      for (let row = 0; row < rows; row++) expect(uv.getY(row)).toBe(uv.getY(uv.count - rows + row))
+    } finally {
+      plain.dispose()
+      decorated.dispose()
+    }
+  })
+
+  it('uses fewer, thicker fret repeats with an open gap between the horizontal strokes', () => {
+    const fret = gaiwanDesigns.find(design => design.id === 'huiwen')!
+    const drawing = fret.draw(6000, 500)
+    expect(drawing.match(/stroke-width="110"/g)).toHaveLength(8)
+    expect(drawing).toContain('M -500 425 H 500 V 75 H -300 V 250 H 180')
+    expect(250 - 75 - 110).toBeGreaterThan(110 / 2)
+    expect(425 - 250 - 110).toBeGreaterThan(110 / 2)
   })
 })

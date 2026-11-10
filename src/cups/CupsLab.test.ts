@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import CupsLab from './CupsLab.vue'
 import { vessels } from './catalogue'
 import { palette } from './palette'
-import { yunomiDesigns } from './designs'
+import { gaiwanDesigns, yunomiDesigns } from './designs'
 import { createCupGallery } from './renderer'
 
 const gallery = vi.hoisted(() => ({
@@ -97,6 +97,14 @@ describe('cup lab cultural section', () => {
     await vi.waitFor(() => expect(root.querySelector('.cup-stage')?.getAttribute('data-ready')).toBe('true'))
   }
 
+  async function chooseCulture(value: string) {
+    const select = root.querySelector<HTMLSelectElement>('[aria-label="Culture / vessel"]')!
+    select.value = value
+    select.dispatchEvent(new Event('change', { bubbles: true }))
+    await nextTick()
+    await vi.waitFor(() => expect(root.querySelector('.cup-stage')?.getAttribute('data-ready')).toBe('true'))
+  }
+
   it('keeps the shape gallery grey and separates the twelve colours into a single-mug study', async () => {
     await mount()
     expect(vessels.every(vessel => vessel.colors.body === '#959693')).toBe(true)
@@ -180,5 +188,61 @@ describe('cup lab cultural section', () => {
     media.dispatchEvent(new Event('change'))
     await vi.waitFor(() => expect(createCupGallery).toHaveBeenCalledOnce())
     expect(vi.mocked(createCupGallery).mock.calls[0]![1]).toHaveLength(18)
+  })
+
+  it('switches cultural vessels on the right without adding a tab, and remembers each pattern', async () => {
+    await mount()
+    await chooseStudy('Designs')
+    const japanese = root.querySelector<HTMLInputElement>('input[value="mizutama"]')!
+    japanese.click()
+    await nextTick()
+    await chooseCulture('china')
+    expect(root.querySelectorAll('.study-nav button')).toHaveLength(3)
+    expect(root.querySelectorAll('canvas')).toHaveLength(1)
+    expect(root.querySelectorAll('.cup-viewport')).toHaveLength(1)
+    expect(root.querySelectorAll('input[name="cup-design"]')).toHaveLength(3)
+    const call = vi.mocked(createCupGallery).mock.calls.at(-1)!
+    expect(call[1][0]!.vessel.id).toBe('gaiwan')
+    expect(call[1][0]!.vessel.colors.eyes).toBe('#2f4a8a')
+    expect(call[1][0]!.design).toBe(gaiwanDesigns[0])
+    expect(call[2]?.turntable).toBe(true)
+    expect(root.querySelector('.culture-sources')?.textContent).toContain('Cloud scrolls')
+    expect(root.querySelector('.culture-sources')?.textContent).not.toContain('Seigaiha')
+    for (const option of gaiwanDesigns) {
+      root.querySelector<HTMLInputElement>(`input[value="${option.id}"]`)!.click()
+      await nextTick()
+      expect(root.querySelector('figcaption')?.textContent).toContain(option.name)
+    }
+    expect(gallery.setDesign).toHaveBeenLastCalledWith(0, gaiwanDesigns[2])
+    expect(createCupGallery).toHaveBeenCalledTimes(3)
+    await chooseCulture('japan')
+    expect(root.querySelector<HTMLInputElement>('input[value="mizutama"]')!.checked).toBe(true)
+    await chooseCulture('china')
+    expect(root.querySelector<HTMLInputElement>('input[value="huiwen"]')!.checked).toBe(true)
+    expect(vi.mocked(createCupGallery).mock.calls.at(-1)![1][0]!.design).toBe(gaiwanDesigns[2])
+  })
+
+  it('keeps manual rotation available for both cultures with reduced motion', async () => {
+    await mount(true)
+    await chooseStudy('Designs')
+    await chooseCulture('china')
+    expect(root.querySelector('[aria-label="Turn the cup"]')).not.toBeNull()
+    expect(root.querySelector('.cup-canvas')?.classList.contains('is-hidden')).toBe(false)
+    expect(root.textContent).not.toContain('Slow turn')
+    expect(vi.mocked(createCupGallery).mock.calls.at(-1)![1][0]!.vessel.id).toBe('gaiwan')
+  })
+
+  it('uses the matching gaiwan PNGs when WebGL is unavailable', async () => {
+    await mount()
+    vi.mocked(createCupGallery).mockImplementationOnce(() => { throw new Error('WebGL unavailable') })
+    await chooseStudy('Designs')
+    await chooseCulture('china')
+    for (const design of gaiwanDesigns) {
+      root.querySelector<HTMLInputElement>(`input[value="${design.id}"]`)!.click()
+      await nextTick()
+      expect(root.querySelector('.cup-viewport img')?.getAttribute('src')).toBe(`/cups/stills/designs/${design.id}.png`)
+    }
+    expect(root.querySelector('[aria-label="Turn the cup"]')).toBeNull()
+    expect(createCupGallery).toHaveBeenCalledTimes(2)
   })
 })

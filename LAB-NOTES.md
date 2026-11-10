@@ -1,8 +1,33 @@
 # Huitaca Cups lab
 
-## Yunomi pattern study
+## Gaiwan and cultural pattern selector
 
-- Designs shows only the yunomi, with a shared navy/cream scheme and three
+- Committed the yunomi checkpoint locally as `d0b0344`; no push.
+- Designs remains the third study. Its right-side “Culture / vessel” selector
+  switches between Japan / Yunomi and China / Gaiwan, with three patterns each.
+  Each culture remembers its selected pattern. Switching vessels disposes the
+  previous gallery before creating the next one; choosing a pattern reuses it.
+- Gaiwan follows the supplied reference's cloud scrolls, lotus petals and fret
+  border in one blue-on-ivory scheme. These are decorative interpretations,
+  not replicas of ritual iconography or claims of a prescribed repeat count.
+  [Research and simplification limits](docs/gaiwan-patterns.md).
+- The decorated gaiwan raises the eyes to Y=1.00 and puts the pattern below
+  Y=0.70, leaving 0.125 units of clear space. Its knob and foot use the same
+  blue as the rim. The eighteen grey Shapes definitions retain their original
+  outlines, face positions, colour slots and static previews.
+- Uses the existing unlit channel-mask shader, 25% resolution margin and
+  2048-pixel cap, without more meshes or passes. Three new fallbacks use the
+  real renderer. For a 512px export the gaiwan mask is 896 × 87 pixels; its
+  maximum is 2048 × 200. These are texture dimensions, not frame-time or
+  low-end hardware performance measurements.
+- The fret border uses six larger repeats, thicker strokes and one open inward
+  return per unit. Checked an actual 64px render without increasing resolution.
+- Full suite: 319 passing tests, strict TypeScript and production build pass.
+  The pre-existing lazy-renderer chunk-size warning remains.
+
+## Yunomi pattern checkpoint
+
+- At this checkpoint Designs showed only the yunomi, with a navy/cream scheme and three
   deliberately bold interpretations: seigaiha waves, tokusa stripes and
   mizutama dots. Sources are linked in the pattern notes. Repeat counts are
   composition choices, not claims about culturally prescribed numbers.
