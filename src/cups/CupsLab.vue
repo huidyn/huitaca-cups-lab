@@ -75,7 +75,7 @@ onUnmounted(() => {
       <div class="study-heading">
         <p class="eyebrow">STUDY 01 / FORM</p>
         <h1 id="study-title">A little character.</h1>
-        <p class="study-description">Six shapes. Two eyes. Nothing extra.</p>
+        <p class="study-description">Twelve shapes. Two eyes. Nothing extra.</p>
       </div>
 
       <div ref="stage" class="cup-stage" :data-ready="ready">
@@ -84,7 +84,7 @@ onUnmounted(() => {
           <div class="cup-viewport" role="img" :aria-label="`${vessel.name}, grey with white eyes${vessel.id === 'takeaway' ? ' and a lid' : ' and a dark interior'}`">
             <img v-if="fallback || reduced" :src="`/cups/stills/${vessel.id}.png`" alt="" width="512" height="512" />
           </div>
-          <figcaption><span class="cup-number">0{{ i + 1 }}</span>{{ vessel.name }}</figcaption>
+          <figcaption><span class="cup-number">{{ String(i + 1).padStart(2, '0') }}</span>{{ vessel.name }}</figcaption>
         </figure>
       </div>
 

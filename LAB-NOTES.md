@@ -1,10 +1,31 @@
 # Huitaca Cups lab
 
-## Current pass: top-row shapes only
+## Current pass: two rows, twelve shapes
 
 Preview: <http://localhost:5190/cups>. Original bloub: <http://localhost:5190/>.
-First six approved for a local commit. No pushes. This is a visual first pass,
-not the complete lab brief.
+First six approved and committed locally at `ed76d29`. No pushes.
+The next six are also approved for a local commit. The broader lab brief remains open.
+
+### Second row, visually approved
+
+- Added in the reference's order: footed bowl, round bowl, rimmed cup,
+  rounded tumbler, goblet, and round mug.
+- All six reuse the existing JSON outlines, unlit palette, recessed dark interiors,
+  surface-following eyes and shared renderer. No new geometry code or dependency.
+- The bowls have separate low feet. The rimmed cup has a thick collar. The goblet
+  has a short stem and broad foot. The round mug uses the approved 1.3x handle
+  flares over 0.24 units, with both terminal rings buried inside its outer wall.
+- The approved first six JSON entries are unchanged. Desktop keeps six columns;
+  below 64rem, three columns. Labels now count through 12 rather than 010–012.
+- Generated six matching 512px fallback PNGs from the real renderer, without
+  posting static previews. Review the shapes directly in `/cups`.
+- Strict TypeScript, production build and all 51 focused cup tests pass. These
+  cover all twelve surfaces and gaze extremes, handle joins, lid and renderer;
+  new overhead-ray checks confirm clear openings into all six new interiors.
+- Live pane: all twelve labels are present, one canvas has rendered, and the
+  three-column narrow layout has no horizontal overflow.
+- The validation table below records the first-row checkpoint, not new performance
+  measurements for twelve cups.
 
 ![Earlier shape study, before the flared-handle pass](docs/cups-top-row.png)
 

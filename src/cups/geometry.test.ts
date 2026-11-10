@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { Mesh, MeshBasicMaterial, Vector3 } from 'three'
+import { Mesh, MeshBasicMaterial, Raycaster, Vector3 } from 'three'
 import { vessels } from './catalogue'
 import { createCup, createHandleGeometry, radiusAtY } from './geometry'
 
-describe('top-row cups', () => {
-  it('keeps the six reference silhouettes in order', () => {
+describe('reference cups', () => {
+  it('keeps the first two reference rows in order', () => {
     expect(vessels.map(v => v.id)).toEqual([
-      'mug', 'tall-mug', 'teacup', 'tumbler', 'takeaway', 'small-cup'
+      'mug', 'tall-mug', 'teacup', 'tumbler', 'takeaway', 'small-cup',
+      'footed-bowl', 'round-bowl', 'rimmed-cup', 'rounded-tumbler', 'goblet', 'round-mug'
     ])
   })
 
@@ -71,6 +72,21 @@ describe('top-row cups', () => {
       expect(inside.outline.at(-1)![1]).toBeLessThan(inside.outline[0]![1])
       expect(parseInt(vessel.colors[inside.color]!.slice(1, 3), 16))
         .toBeLessThan(parseInt(vessel.colors[body.color]!.slice(1, 3), 16))
+    }
+  })
+
+  it.each(vessels.slice(6))('leaves the second-row opening clear into the interior: $id', vessel => {
+    const cup = createCup(vessel)
+    try {
+      cup.root.updateMatrixWorld(true)
+      const radius = vessel.parts.find(part => part.id === 'inside')!.outline[0]![0]
+      for (const [x, z] of [[0, 0], [0.45, 0], [-0.45, 0], [0, 0.45], [0, -0.45]]) {
+        const ray = new Raycaster(new Vector3(x! * radius, 4, z! * radius), new Vector3(0, -1, 0))
+        const hit = ray.intersectObject(cup.root, true)[0]
+        expect(hit?.object.name).toBe('inside')
+      }
+    } finally {
+      cup.dispose()
     }
   })
 
