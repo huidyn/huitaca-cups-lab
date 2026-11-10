@@ -1,5 +1,30 @@
 # Huitaca Cups lab
 
+## Podstakannik pattern study
+
+- Russia / Glass + podstakannik joins Designs with a windows row, a leaf
+  scroll and Kazakovo-style filigree, all drawn on the metal holder.
+  [Sources, glass decision and adaptation notes](docs/podstakannik-patterns.md).
+- Glass look, decided: no transparency. A general brown drink `#7b4526` stops
+  at Y=1.88, below the rim at Y=2.10. Above it the glass is empty: pale tint
+  `#b3d0cb` outside, `#93b6b0` inner wall, light rim `#dcebe8`. A flat
+  `#4a2713` surface closes the drink. Holder openings repeat the drink brown.
+  No highlight streak. A first version with brown up to the rim was rejected
+  by Alessandro: it read neither as glass nor as a filled glass.
+- The decorated face moves down to Y=1.58 so the eyes stay in the drink at
+  the top of their gaze travel.
+- The holder is now thin metal, 0.03 units outside the glass instead of 0.06,
+  with a smaller lip and foot. This is a shared form change; the grey Shapes
+  still was regenerated.
+- Holder and handle are nickel `#aeb2b3`; blackening ink is charcoal
+  `#3a3d40`. At most two decorative inks per design.
+- The pattern band targets the `holder` part (Y=0.26–1.02). Decorated variants
+  can assign colour slots per part and for the handle; the gaiwan uses the
+  same mechanism. Splitting the glass at the drink level adds two flat meshes;
+  the patterned draw count does not change.
+- All three 512px fallbacks and the grey still use the real renderer. Live
+  selection and 64px composites on `#F5F5F5` and `#262626` were inspected.
+  These are rendering checks, not hardware benchmarks.
 ## Kulhad pattern study
 
 - India / Kulhad joins Designs with a floral fan, two triangle rows and a
@@ -274,7 +299,7 @@ Review directly in the live screen; do not post static previews every iteration.
 The first row's current appearance is approved as the starting point. Later
 material, expression and interaction studies can build on it.
 
-Glass look: not compared or selected yet.
+Glass look: flat opaque glass colour, selected in the podstakannik pattern study.
 Sidebar A versus B: not built or selected yet.
 
 ## Validation and initial measurements

@@ -1,6 +1,6 @@
 import type { DesignInks } from './pattern'
 import { vessels } from './catalogue'
-import type { VesselDefinition } from './types'
+import type { Point2, VesselDefinition } from './types'
 import { palette } from './palette'
 
 export interface CupDesign {
@@ -377,6 +377,103 @@ export const kulhadDesigns: CupDesign[] = [
   }
 ]
 
+const PODSTAKANNIK_SOURCES = [
+  { title: 'Rodina · Podstakannik, Kolchugino production (Bitkina, 2016)', url: 'https://rodina-history.ru/2016/10/18/rodina-podstakannik.html' },
+  { title: 'Wikimedia Commons · Podstakannik photographs', url: 'https://commons.wikimedia.org/wiki/Category:Podstakannik' }
+]
+
+// Verre opaque et plat, sans transparence : une boisson brune s'arrête sous le bord, le verre vide
+// au-dessus garde une teinte pâle, et les ouvertures du porte-verre reprennent la boisson (encre B).
+export const podstakannikColors: Record<string, string> & DesignInks = {
+  body: '#7b4526', inside: '#4a2713', glass: '#b3d0cb', glassInside: '#93b6b0', rim: '#dcebe8',
+  metal: '#aeb2b3', border: '#8f9496', eyes: '#fffef9',
+  background: '#aeb2b3', inkA: '#3a3d40', inkB: '#7b4526'
+}
+
+// Fil enroulé vers son centre : la base de tout rinceau ou filigrane ci-dessous.
+function spiral(cx: number, cy: number, radius: number, from: number, turns: number, direction: 1 | -1): string {
+  const steps = Math.ceil(turns * 24)
+  let out = ''
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps
+    const angle = from + direction * turns * 2 * Math.PI * t
+    const r = radius * (1 - 0.78 * t)
+    out += `${i ? ' L' : 'M'} ${n(cx + Math.cos(angle) * r)} ${n(cy + Math.sin(angle) * r)}`
+  }
+  return out
+}
+
+export const podstakannikDesigns: CupDesign[] = [
+  {
+    id: 'podstakannik-windows',
+    name: 'Windows',
+    nativeName: 'Окошки',
+    previewCenter: 0.5,
+    note: 'One row of tall, round-topped openings in a plain nickel sleeve, with the glass showing through. Photographed Russian holders carry such a row near the base, and Rodina describes a Kolchugino plate “with little windows”. The count is a composition choice.',
+    sources: PODSTAKANNIK_SOURCES,
+    draw(width, height) {
+      const half = width / 8 * 0.27
+      const top = height * 0.3
+      const bottom = height * 0.86
+      return [0.06, 0.92].map(y =>
+        `<rect y="${n(height * y)}" width="${n(width)}" height="${n(height * 0.07)}" fill="var(--ink-a)"/>`).join('')
+        + around(width, 8, 0, x =>
+          `<path d="M ${n(x - half)} ${n(bottom)} L ${n(x - half)} ${n(top + half)} A ${n(half)} ${n(half)} 0 0 1 ${n(x + half)} ${n(top + half)} L ${n(x + half)} ${n(bottom)} Z" fill="var(--ink-b)"/>`)
+    }
+  },
+  {
+    id: 'podstakannik-scroll',
+    name: 'Leaf scroll',
+    nativeName: 'Растительный орнамент',
+    previewCenter: 0.5,
+    note: 'A running stem with curled offshoots, round flowers and broad leaves, bright on a blackened ground: a bold reading of the stamped floral relief on a photographed nickel holder. Rodina describes nickel plating with decorative blackening. A simplified composition, not a copy of one factory pattern.',
+    sources: PODSTAKANNIK_SOURCES,
+    draw(width, height) {
+      const period = width / 4
+      const stroke = height * 0.1
+      const curl = (x: number, up: boolean) => {
+        const y = (value: number) => height * (up ? value : 1 - value)
+        const radius = height * 0.2
+        return `<path d="${spiral(x, y(0.34), radius, up ? Math.PI / 2 : -Math.PI / 2, 1.1, up ? 1 : -1)}" fill="none" stroke="var(--body)" stroke-width="${n(stroke)}" stroke-linecap="round" stroke-linejoin="round"/>`
+          + `<circle cx="${n(x)}" cy="${n(y(0.34))}" r="${n(height * 0.085)}"/>`
+          + `<path d="M ${n(x + period * 0.12)} ${n(y(0.5))} C ${n(x + period * 0.14)} ${n(y(0.3))} ${n(x + period * 0.22)} ${n(y(0.16))} ${n(x + period * 0.3)} ${n(y(0.14))} C ${n(x + period * 0.3)} ${n(y(0.32))} ${n(x + period * 0.24)} ${n(y(0.46))} ${n(x + period * 0.12)} ${n(y(0.5))} Z"/>`
+      }
+      return `<rect y="${n(height * 0.04)}" width="${n(width)}" height="${n(height * 0.92)}" fill="var(--ink-a)"/>`
+        + around(width, 4, 0, x =>
+          `<g transform="translate(${n(x)} 0)" fill="var(--body)">`
+          + `<path d="M 0 ${n(height * 0.56)} C ${n(period / 6)} ${n(height * 0.56)} ${n(period / 3)} ${n(height * 0.44)} ${n(period / 2)} ${n(height * 0.44)} C ${n(period * 2 / 3)} ${n(height * 0.44)} ${n(period * 5 / 6)} ${n(height * 0.56)} ${n(period)} ${n(height * 0.56)}" fill="none" stroke="var(--body)" stroke-width="${n(stroke)}"/>`
+          + curl(period * 0.06, true)
+          + curl(period * 0.56, false)
+          + '</g>')
+    }
+  },
+  {
+    id: 'podstakannik-filigree',
+    name: 'Filigree',
+    nativeName: 'Казаковская филигрань',
+    previewCenter: 0.4,
+    note: 'Paired wire scrolls with a single granule between them, drawn far thicker than real wire so they survive at avatar size. Kazakovo filigree, Nizhny Novgorod Oblast, has no metal backing, so the glass shows between the wires; the craft began in 1939 with a glass holder. A new composition in that technique’s vocabulary, not a copy of a Kazakovo model.',
+    sources: [
+      { title: 'Казаковская филигрань · craft history and openwork technique', url: 'https://ru.wikipedia.org/wiki/Казаковская_филигрань' },
+      { title: 'Казаковское предприятие художественных изделий · history', url: 'https://xn--h1adpy.xn--p1ai/o-predpriyatii/istoriya-predpriyatiya/' }
+    ],
+    draw(width, height) {
+      const period = width / 5
+      const stroke = height * 0.09
+      const radius = height * 0.21
+      const reach = period * 0.2
+      return `<rect y="${n(height * 0.1)}" width="${n(width)}" height="${n(height * 0.8)}" fill="var(--ink-b)"/>`
+        + around(width, 5, 0, x =>
+          `<g transform="translate(${n(x)} 0)" fill="none" stroke="var(--body)" stroke-width="${n(stroke)}" stroke-linecap="round" stroke-linejoin="round">`
+          + ([-1, 1] as const).map(side =>
+            `<path d="M 0 ${n(height * 0.9)} Q ${n(side * reach * 0.2)} ${n(height * 0.62)} ${n(side * (reach + radius))} ${n(height * 0.42)}"/>`
+            + `<path d="${spiral(side * reach, height * 0.42, radius, side > 0 ? 0 : Math.PI, 1.2, side > 0 ? -1 : 1)}"/>`).join('')
+          + `<circle cx="${n(period / 2)}" cy="${n(height * 0.68)}" r="${n(height * 0.09)}" fill="var(--body)" stroke="none"/>`
+          + '</g>')
+    }
+  }
+]
+
 export interface DesignCollection {
   id: string
   label: string
@@ -387,20 +484,54 @@ export interface DesignCollection {
 }
 
 // Les variantes décorées ne modifient jamais le catalogue gris des formes.
-function decoratedVessel(id: string, colors: DesignCollection['colors'], centerY: number): VesselDefinition {
+function decoratedVessel(id: string, colors: DesignCollection['colors'], centerY: number,
+  slots: Record<string, string> = {}): VesselDefinition {
   const vessel = vessels.find(vessel => vessel.id === id)!
   return {
     ...vessel, colors: { ...colors }, face: { ...vessel.face, centerY },
-    parts: vessel.parts.map(part => ({
-      ...part, color: id === 'gaiwan' && ['foot', 'lid-knob'].includes(part.id) ? 'rim' : part.color
-    }))
+    parts: vessel.parts.map(part => ({ ...part, color: slots[part.id] ?? part.color })),
+    handle: vessel.handle && { ...vessel.handle, color: slots.handle ?? vessel.handle.color }
+  }
+}
+
+// Coupe un profil à la hauteur y ; le point d'intersection appartient aux deux moitiés.
+function cutOutline(outline: Point2[], y: number): [Point2[], Point2[]] {
+  for (let i = 1; i < outline.length; i++) {
+    const a = outline[i - 1]!
+    const b = outline[i]!
+    if (a[1] !== b[1] && (a[1] - y) * (b[1] - y) <= 0) {
+      const point: Point2 = [n(a[0] + (b[0] - a[0]) * (y - a[1]) / (b[1] - a[1])), y]
+      return [[...outline.slice(0, i), point], [point, ...outline.slice(i)]]
+    }
+  }
+  throw new Error(`No wall at y=${y}`)
+}
+
+// Verre rempli en aplats : boisson sous le niveau, verre vide au-dessus, surface plate à l'intérieur.
+// Deux tours de plus sans texture ni transparence ; tout ce qui est sous la surface reste caché.
+function filledGlass(vessel: VesselDefinition, level: number): VesselDefinition {
+  return {
+    ...vessel,
+    parts: vessel.parts.flatMap(part => {
+      if (part.id === 'body') {
+        const [drink, empty] = cutOutline(part.outline, level)
+        return [{ ...part, outline: drink }, { ...part, id: 'glass', color: 'glass', outline: empty }]
+      }
+      if (part.id === 'inside') {
+        const [wall] = cutOutline(part.outline, level)
+        return [{ ...part, id: 'glass-inside', color: 'glassInside', outline: wall },
+          { ...part, outline: [wall.at(-1)!, [0, level]] }]
+      }
+      return [part]
+    })
   }
 }
 
 export const designCollections: DesignCollection[] = [
   { id: 'japan', label: 'Japan · Yunomi', vessel: decoratedVessel('yunomi', designColors, 1.12), colors: designColors, colorDescription: 'cream on navy', designs: yunomiDesigns },
-  { id: 'china', label: 'China · Gaiwan', vessel: decoratedVessel('gaiwan', gaiwanColors, 1), colors: gaiwanColors, colorDescription: 'blue on ivory', designs: gaiwanDesigns },
+  { id: 'china', label: 'China · Gaiwan', vessel: decoratedVessel('gaiwan', gaiwanColors, 1, { foot: 'rim', 'lid-knob': 'rim' }), colors: gaiwanColors, colorDescription: 'blue on ivory', designs: gaiwanDesigns },
   { id: 'colombia', label: 'Colombia · Clay mug', vessel: decoratedVessel('colombian-mug', colombianColors, 1.16), colors: colombianColors, colorDescription: 'cream on terracotta', designs: colombianDesigns },
   { id: 'turkiye', label: 'Türkiye · Çay glass', vessel: decoratedVessel('cay-glass', cayColors, 1.22), colors: cayColors, colorDescription: 'cream on turquoise with a gold rim', designs: cayDesigns },
-  { id: 'india', label: 'India · Kulhad', vessel: decoratedVessel('kulhad', kulhadColors, 1.22), colors: kulhadColors, colorDescription: 'warm cream and olive-charcoal on red earth', designs: kulhadDesigns }
+  { id: 'india', label: 'India · Kulhad', vessel: decoratedVessel('kulhad', kulhadColors, 1.22), colors: kulhadColors, colorDescription: 'warm cream and olive-charcoal on red earth', designs: kulhadDesigns },
+  { id: 'russia', label: 'Russia · Glass + podstakannik', vessel: filledGlass(decoratedVessel('podstakannik', podstakannikColors, 1.58, { holder: 'metal', handle: 'metal' }), 1.88), colors: podstakannikColors, colorDescription: 'a brown drink below the rim of a clear glass, in a thin nickel holder', designs: podstakannikDesigns }
 ]

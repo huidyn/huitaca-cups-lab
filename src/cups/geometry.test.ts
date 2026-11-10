@@ -166,6 +166,8 @@ describe('reference cups', () => {
     const top = Math.max(...holder.outline.map(point => point[1]))
     expect(vessel.handle).not.toBeNull()
     expect(radiusAtY(holder.outline, 0.7)).toBeGreaterThan(radiusAtY(glass.outline, 0.7))
+    // Métal fin : la paroi serre le verre au lieu de former un second gobelet épais.
+    expect(radiusAtY(holder.outline, 0.7) - radiusAtY(glass.outline, 0.7)).toBeLessThan(0.04)
     expect(Math.max(...vessel.handle!.points.map(point => point[1]))).toBeLessThan(top)
     expect(vessel.face.centerY - vessel.face.height / 2).toBeGreaterThan(top)
   })

@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
-import { Mesh, ShaderMaterial, Color } from 'three'
+import { Mesh, MeshBasicMaterial, ShaderMaterial, Color } from 'three'
 import { vessels } from './catalogue'
 import { createCup } from './geometry'
-import { cayDesigns, colombianDesigns, designCollections, designColors, gaiwanDesigns, kulhadColors, kulhadDesigns, yunomiDesigns } from './designs'
+import { cayDesigns, colombianDesigns, designCollections, designColors, gaiwanDesigns, kulhadColors, kulhadDesigns, podstakannikColors, podstakannikDesigns, yunomiDesigns } from './designs'
 import { bandLayout, designSvg, MASK_INKS, maskWidth } from './pattern'
 import { maskDimensions } from './renderer'
 
@@ -75,8 +75,9 @@ describe('bold recolourable yunomi patterns', () => {
       cup.setMask({ width: 512, height: 128 } as HTMLCanvasElement)
       const texture = material.uniforms.mask!.value
       const dispose = vi.spyOn(texture, 'dispose')
-      cup.setColors({ inkA: '#ff0000', body: '#123456' })
+      cup.setColors({ inkA: '#ff0000', inkB: '#00ff00', body: '#123456' })
       expect(material.uniforms.inkA!.value).toEqual(new Color('#ff0000'))
+      expect(material.uniforms.inkB!.value).toEqual(new Color('#00ff00'))
       expect(material.uniforms.mask!.value).toBe(texture)
       cup.setMask(null)
       expect(dispose).toHaveBeenCalledOnce()
@@ -89,16 +90,22 @@ describe('bold recolourable yunomi patterns', () => {
 
 describe('cultural pattern collections', () => {
   it('provides three designs per culture and keeps the grey source vessels unchanged', () => {
-    expect(designCollections.map(option => option.vessel.id)).toEqual(['yunomi', 'gaiwan', 'colombian-mug', 'cay-glass', 'kulhad'])
-    expect(new Set(designCollections.flatMap(option => option.designs.map(design => design.id))).size).toBe(15)
+    expect(designCollections.map(option => option.vessel.id)).toEqual(['yunomi', 'gaiwan', 'colombian-mug', 'cay-glass', 'kulhad', 'podstakannik'])
+    expect(new Set(designCollections.flatMap(option => option.designs.map(design => design.id))).size).toBe(18)
     for (const option of designCollections) {
       expect(option.designs).toHaveLength(3)
-      expect(option.vessel.colors.body).toBe(option.colors.background)
+      const surface = option.vessel.parts.find(part => part.id === option.vessel.pattern!.surface)!
+      expect(option.vessel.colors[surface.color]).toBe(option.colors.background)
       const original = vessels.find(vessel => vessel.id === option.vessel.id)!
       expect(original.colors.body).toBe('#959693')
-      expect(option.vessel.face.centerY).toBeGreaterThan(original.face.centerY)
+      // Le visage ne monte que lorsque la bande est sur la même paroi que lui.
+      if (surface.id === option.vessel.face.surface) expect(option.vessel.face.centerY).toBeGreaterThan(original.face.centerY)
       expect(option.vessel.face.centerY - option.vessel.face.eyeHeight / 2 - option.vessel.pattern!.to).toBeGreaterThan(0.12)
-      for (const part of original.parts) expect(option.vessel.parts.find(p => p.id === part.id)!.outline).toEqual(part.outline)
+      const filled = option.vessel.parts.some(part => part.id === 'glass')
+      for (const part of original.parts) {
+        if (filled && ['body', 'inside'].includes(part.id)) continue
+        expect(option.vessel.parts.find(p => p.id === part.id)!.outline).toEqual(part.outline)
+      }
     }
     expect(vessels.find(v => v.id === 'gaiwan')!.parts.find(p => p.id === 'lid-knob')!.color).toBe('body')
   })
@@ -302,6 +309,7 @@ describe('cultural pattern collections', () => {
     }
     expect(cayDesigns[2]!.previewCenter).toBe(0)
   })
+
   it.each(kulhadDesigns)('$name uses two sourced earth-coloured inks and periodic copies', design => {
     const vessel = designCollections.find(option => option.id === 'india')!.vessel
     const size = maskDimensions(vessel, 100, 2048)
@@ -372,4 +380,102 @@ describe('cultural pattern collections', () => {
     }
   })
 
+  it.each(podstakannikDesigns)('$name stays within nickel, blackening and the glass colour', design => {
+    const vessel = designCollections.find(option => option.id === 'russia')!.vessel
+    const size = maskDimensions(vessel, 100, 2048)
+    const drawing = design.draw(size.viewWidth, size.viewHeight)
+    const svg = designSvg(drawing, size.viewWidth, size.viewHeight, [size.width, size.height], MASK_INKS)
+    expect(svg).not.toMatch(/var\(|NaN|undefined|<image|<text|filter=/)
+    expect(drawing).toMatch(/translate\(-|M -/)
+    const used = [...new Set([...drawing.matchAll(/var\(--([^)]+)\)/g)].map(match => match[1]))].sort()
+    expect(used).toEqual({
+      'podstakannik-windows': ['ink-a', 'ink-b'],
+      'podstakannik-scroll': ['body', 'ink-a'],
+      'podstakannik-filigree': ['body', 'ink-b']
+    }[design.id])
+    expect(design.sources.length).toBeGreaterThan(1)
+    for (const source of design.sources) expect(new URL(source.url).protocol).toBe('https:')
+    expect(design.note).not.toMatch(/tea|coffee/i)
+  })
+
+  it('draws eight windows, four scroll repeats and five filigree pairs', () => {
+    expect(podstakannikDesigns.map(design => design.id)).toEqual(['podstakannik-windows', 'podstakannik-scroll', 'podstakannik-filigree'])
+    const windows = podstakannikDesigns[0]!.draw(4000, 800)
+    expect(windows.match(/<path /g)).toHaveLength(10)
+    expect(windows.match(/<rect /g)).toHaveLength(2)
+    expect(windows).toContain('M 365 688 L 365 375 A 135 135 0 0 1 635 375 L 635 688 Z')
+    const scroll = podstakannikDesigns[1]!.draw(4000, 800)
+    const repeats = [...scroll.matchAll(/<g [^>]+>(.*?)<\/g>/g)]
+    expect(repeats).toHaveLength(6)
+    for (const repeat of repeats) {
+      expect(repeat[1]!.match(/<circle /g)).toHaveLength(2)
+      expect(repeat[1]!.match(/<path /g)).toHaveLength(5)
+    }
+    const filigree = podstakannikDesigns[2]!.draw(4000, 800)
+    const pairs = [...filigree.matchAll(/<g [^>]+>(.*?)<\/g>/g)]
+    expect(pairs).toHaveLength(7)
+    for (const pair of pairs) {
+      expect(pair[1]!.match(/<path /g)).toHaveLength(4)
+      expect(pair[1]!.match(/<circle /g)).toHaveLength(1)
+    }
+  })
+
+  it('patterns the holder and fills the opaque glass below the rim with two flat meshes', () => {
+    const vessel = designCollections.find(option => option.id === 'russia')!.vessel
+    const original = vessels.find(option => option.id === 'podstakannik')!
+    expect(original.colors.body).toBe('#959693')
+    expect(original.parts.find(part => part.id === 'holder')!.color).toBe('body')
+    expect(original.handle!.color).toBe('body')
+    expect(vessel.face).toEqual({ ...original.face, centerY: 1.58 })
+    expect(vessel.pattern).toEqual({ surface: 'holder', from: 0.26, to: 1.02 })
+    expect(vessel.face.centerY - vessel.face.eyeHeight / 2).toBeGreaterThan(vessel.pattern!.to + 0.3)
+    expect(vessel.parts.find(part => part.id === 'holder')!.color).toBe('metal')
+    expect(vessel.handle!.color).toBe('metal')
+    expect(vessel.parts.find(part => part.id === 'body')!.color).toBe('body')
+    // Boisson sous le niveau 1,88, verre vide au-dessus : les deux moitiés refont le profil d'origine.
+    const level = 1.88
+    const outline = (id: string) => vessel.parts.find(part => part.id === id)!.outline
+    const source = (id: string) => original.parts.find(part => part.id === id)!.outline
+    expect(outline('body').at(-1)).toEqual(outline('glass')[0])
+    expect(outline('body').at(-1)![1]).toBe(level)
+    expect([...outline('body').slice(0, -1), ...outline('glass').slice(1)]).toEqual(source('body'))
+    expect(outline('glass-inside')[0]).toEqual(source('inside')[0])
+    expect(outline('inside')).toEqual([outline('glass-inside').at(-1), [0, level]])
+    expect(vessel.parts.find(part => part.id === 'glass')!.color).toBe('glass')
+    expect(vessel.parts.find(part => part.id === 'glass-inside')!.color).toBe('glassInside')
+    // Les yeux restent dans la boisson, même au bout du regard vers le haut.
+    expect(vessel.face.centerY + vessel.face.eyeHeight / 2 + 0.07).toBeLessThan(level - 0.02)
+    expect(2.1 - level).toBeGreaterThan(0.2)
+    // Les ouvertures montrent la boisson, et le fond du masque est le métal.
+    expect(podstakannikColors.inkB).toBe(podstakannikColors.body)
+    expect(podstakannikColors.background).toBe(podstakannikColors.metal)
+    const plain = createCup(original)
+    const decorated = createCup(vessel, { pattern: true })
+    try {
+      expect(decorated.root.children.length).toBe(plain.root.children.length + 2)
+      for (const id of ['glass', 'glass-inside']) {
+        const material = (decorated.root.getObjectByName(id) as Mesh).material as MeshBasicMaterial
+        expect(material).toBeInstanceOf(MeshBasicMaterial)
+        expect(material.transparent).toBe(false)
+      }
+      const glass = decorated.root.getObjectByName('body') as Mesh
+      expect(glass.material).not.toBeInstanceOf(ShaderMaterial)
+      expect((glass.material as MeshBasicMaterial).transparent).toBe(false)
+      expect((glass.material as MeshBasicMaterial).color).toEqual(new Color(podstakannikColors.body))
+      const holder = decorated.root.getObjectByName('holder') as Mesh
+      const uniforms = (holder.material as ShaderMaterial).uniforms
+      expect(uniforms.body!.value).toEqual(new Color(podstakannikColors.metal))
+      expect(uniforms.inkA!.value).toEqual(new Color(podstakannikColors.inkA))
+      expect(uniforms.inkB!.value).toEqual(new Color(podstakannikColors.body))
+      expect((holder.material as ShaderMaterial).transparent).toBe(false)
+      expect(((decorated.root.getObjectByName('handle') as Mesh).material as MeshBasicMaterial).color)
+        .toEqual(new Color(podstakannikColors.metal))
+      const size = maskDimensions(vessel, 10000, 2048)
+      expect(size.width).toBe(2048)
+      expect(size.height).toBeLessThan(512)
+    } finally {
+      plain.dispose()
+      decorated.dispose()
+    }
+  })
 })
