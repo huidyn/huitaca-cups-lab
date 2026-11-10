@@ -1,5 +1,20 @@
 # Huitaca Cups lab
 
+## Separate form and colour studies
+
+- Shapes stays an eighteen-vessel grey gallery, including its original static
+  fallbacks. Colours shows only the first mug, with twelve radio choices on the
+  right (below the mug on narrow screens). Choosing a colour changes material
+  values, not geometry, and does not affect the Shapes catalogue.
+- Navigation sits on the left on desktop and above the study below 64rem.
+- The shared Light / Dark selector uses the App's `bg-tertiary` backgrounds:
+  `#f5f5f5` and `#262626`. The previous Page / Sidebar preview switch is removed.
+- `src/cups/palette.ts` holds the tuned choices independently of vessel JSON.
+  Each has a matching mug PNG for reduced motion or unavailable WebGL.
+- The offline solver's CIEDE2000 threshold of 22 is a design heuristic, not an
+  accessibility standard or a guarantee of readability at every avatar size.
+  No palette calculations or lighting run in the render loop.
+
 ## Current pass: eighteen shapes, with a separate cultural group
 
 Preview: <http://localhost:5190/cups>. Original bloub: <http://localhost:5190/>.

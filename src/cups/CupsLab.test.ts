@@ -3,9 +3,11 @@ import { createApp, nextTick } from 'vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import CupsLab from './CupsLab.vue'
 import { vessels } from './catalogue'
+import { palette } from './palette'
 import { createCupGallery } from './renderer'
 
 const gallery = vi.hoisted(() => ({
+  setColors: vi.fn(),
   setElevation: vi.fn(),
   setTurning: vi.fn(),
   dispose: vi.fn()
@@ -80,5 +82,73 @@ describe('cup lab cultural section', () => {
     await nextTick()
     expect(gallery.dispose).toHaveBeenCalledOnce()
     expect(root.querySelectorAll('.cup-viewport img')).toHaveLength(18)
+  })
+
+  async function chooseStudy(name: string) {
+    const button = [...root.querySelectorAll<HTMLButtonElement>('.study-nav button')]
+      .find(button => button.textContent?.includes(name))!
+    button.click()
+    await nextTick()
+    await vi.waitFor(() => expect(root.querySelector('.cup-stage')?.getAttribute('data-ready')).toBe('true'))
+  }
+
+  it('keeps the shape gallery grey and separates the twelve colours into a single-mug study', async () => {
+    await mount()
+    expect(vessels.every(vessel => vessel.colors.body === '#959693')).toBe(true)
+    expect(root.querySelector('.palette-picker')).toBeNull()
+    await chooseStudy('Colours')
+    expect(gallery.dispose).toHaveBeenCalledOnce()
+    expect(root.querySelectorAll('.cup-viewport')).toHaveLength(1)
+    expect(root.querySelectorAll('.palette-option input')).toHaveLength(12)
+    const view = vi.mocked(createCupGallery).mock.calls.at(-1)![1][0]!
+    expect(view.vessel.id).toBe('mug')
+    expect(view.vessel.colors.body).toBe('#b5533c')
+    expect(root.querySelector('.culture-sources')).toBeNull()
+    for (const option of palette) {
+      root.querySelector<HTMLInputElement>(`input[value="${option.id}"]`)!.click()
+      await nextTick()
+      expect(gallery.setColors).toHaveBeenLastCalledWith(0, option.colors)
+    }
+    expect(createCupGallery).toHaveBeenCalledTimes(2)
+    await chooseStudy('Shapes')
+    expect(root.querySelectorAll('.cup-viewport')).toHaveLength(18)
+    expect(root.querySelector('.palette-picker')).toBeNull()
+    await chooseStudy('Colours')
+    expect(root.querySelector<HTMLInputElement>('input[value="graphite"]')!.checked).toBe(true)
+    expect(vi.mocked(createCupGallery).mock.calls.at(-1)![1][0]!.vessel.colors.body).toBe('#646866')
+  })
+
+  it('switches theme without rebuilding the cup or losing the selected colour', async () => {
+    await mount()
+    await chooseStudy('Colours')
+    const modes = root.querySelectorAll<HTMLButtonElement>('.theme-control button')
+    modes[1]!.click()
+    await nextTick()
+    expect(root.querySelector('main')?.getAttribute('data-theme')).toBe('dark')
+    expect(modes[1]!.getAttribute('aria-pressed')).toBe('true')
+    expect(createCupGallery).toHaveBeenCalledTimes(2)
+    await chooseStudy('Shapes')
+    expect(root.querySelector('main')?.getAttribute('data-theme')).toBe('dark')
+    modes[0]!.click()
+    await nextTick()
+    expect(root.querySelector('main')?.getAttribute('data-theme')).toBe('light')
+    expect(root.querySelector('[aria-label="Background"]')).toBeNull()
+  })
+
+  it('lets reduced-motion visitors select all colours using matching static mug previews', async () => {
+    await mount(true)
+    await chooseStudy('Colours')
+    for (const option of palette) {
+      root.querySelector<HTMLInputElement>(`input[value="${option.id}"]`)!.click()
+      await nextTick()
+      expect(root.querySelector('img')?.getAttribute('src')).toBe(`/cups/stills/palette/${option.id}.png`)
+    }
+    expect(createCupGallery).not.toHaveBeenCalled()
+    await chooseStudy('Shapes')
+    expect(root.querySelectorAll('.cup-viewport img')).toHaveLength(18)
+    media.matches = false
+    media.dispatchEvent(new Event('change'))
+    await vi.waitFor(() => expect(createCupGallery).toHaveBeenCalledOnce())
+    expect(vi.mocked(createCupGallery).mock.calls[0]![1]).toHaveLength(18)
   })
 })

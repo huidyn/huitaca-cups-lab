@@ -132,6 +132,10 @@ export function createCupGallery(canvas: HTMLCanvasElement, views: CupView[]) {
   invalidate()
 
   return {
+    setColors(index: number, colors: Record<string, string>) {
+      entries[index]?.cup.setColors(colors)
+      invalidate()
+    },
     setTurning(value: boolean) {
       turning = value
       turnTime = 0

@@ -77,6 +77,15 @@ describe('on-demand cup renderer', () => {
     expect(queue.size).toBe(0)
   })
 
+  it('redraws once when colours change and then returns to rest', () => {
+    step()
+    gallery.setColors(0, { body: '#d3b787', eyes: '#1c1c1a' })
+    expect(queue.size).toBe(1)
+    step()
+    expect(canvas.dataset.frames).toBe('2')
+    expect(queue.size).toBe(0)
+  })
+
   it('settles after mouse following, and identical pointer targets do not wake it', () => {
     step()
     const event = () => new PointerEvent('pointermove', { clientX: 600, clientY: 90, pointerType: 'mouse' })

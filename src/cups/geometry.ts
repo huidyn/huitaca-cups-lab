@@ -152,6 +152,11 @@ export function createCup(definition: VesselDefinition) {
   return {
     root,
     look,
+    setColors(colors: Record<string, string>) {
+      materials.forEach((material, slot) => {
+        if (colors[slot]) material.color.set(colors[slot])
+      })
+    },
     dispose() {
       root.traverse(object => {
         if (object instanceof Mesh) object.geometry.dispose()
