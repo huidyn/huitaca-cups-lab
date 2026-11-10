@@ -26,8 +26,11 @@ independent of the mask.
   lotus use on gaiwans, not the exact fan in the supplied reference.
 - [Gotheborg's lotus glossary](https://www.gotheborg.com/glossary/lotus.shtml)
   explains its associations with purity and its Buddhist and Daoist contexts.
-- Simplification: five broad pointed petals in a fan, without veins, small
-  stamens or a vine. This is a decorative petal motif, not an Eight Buddhist
+- Simplification: five broad pointed petals in a wide fan, with open gaps between
+  petals and three spaced fans around the bowl, without veins, small stamens
+  or a vine. The band is offset by 60 degrees so the front is framed by two
+  side fans rather than a mouth-like flower under the eyes; the third sits at
+  the back. This is a decorative petal motif, not an Eight Buddhist
   Emblems set or a claim about the petal count of a sacred lotus.
 
 ## Fret border, huiwen 回纹

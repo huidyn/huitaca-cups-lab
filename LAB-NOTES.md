@@ -1,5 +1,25 @@
 # Huitaca Cups lab
 
+## Colombian pattern study
+
+- China checkpoint committed locally as `b0b3052`, without a push. The
+  subsequent lotus refinements and first Colombian version were staged as
+  requested; the new spiral and diagonal revisions remain unstaged.
+- Colombia / Clay mug joins the existing culture selector. All three choices
+  share terracotta `#b5533c` and cream `#f3eadb`, with unchanged grey Shapes.
+- The stepped band follows the supplied mug reference. The second choice
+  restores the staged square spirals previously in slot three; the third follows the clarified
+  sketch with alternating closed upright/inverted triangles and parallel
+  diagonal groups between rules. Its strokes are 75% thicker than before.
+  [Sources and interpretation limits](docs/colombian-patterns.md).
+- The decorated face is at Y=1.16; the Y=0.12–0.82 pattern band leaves 0.155
+  units below the eyes. The handle, meshes, shader and resolution cap are
+  unchanged. Masks measure 1024 × 136 for 512px exports, capped at 2048 × 272.
+  Native 64px renders and matching 512px PNG fallbacks were checked.
+- Latest full suite: 330 tests across 20 files pass, as do strict TypeScript
+  and the production build. The existing lazy-renderer chunk warning remains.
+  No low-end hardware frame-time measurement is claimed.
+
 ## Gaiwan and cultural pattern selector
 
 - Committed the yunomi checkpoint locally as `d0b0344`; no push.
@@ -22,7 +42,9 @@
   low-end hardware performance measurements.
 - The fret border uses six larger repeats, thicker strokes and one open inward
   return per unit. Checked an actual 64px render without increasing resolution.
-- Full suite: 319 passing tests, strict TypeScript and production build pass.
+- Lotus fans are 20% wider, with larger gaps between petals and three repeats
+  instead of four. Their fallback was refreshed at the same mask resolution.
+- China checkpoint: 319 passing tests, strict TypeScript and production build pass.
   The pre-existing lazy-renderer chunk-size warning remains.
 
 ## Yunomi pattern checkpoint

@@ -1,11 +1,14 @@
 import type { DesignInks } from './pattern'
 import { vessels } from './catalogue'
 import type { VesselDefinition } from './types'
+import { palette } from './palette'
 
 export interface CupDesign {
   id: string
   name: string
   nativeName: string
+  // Centre de la vignette en fraction du tour, indépendant du visage.
+  previewCenter?: number
   note: string
   sources: { title: string; url: string }[]
   // Corps SVG en unités de paroi (millièmes) ; chaque motif se répète un nombre entier
@@ -90,6 +93,8 @@ export const gaiwanColors: Record<string, string> & DesignInks = {
   background: '#eeeae1', inkA: '#2f4a8a', inkB: '#2f4a8a'
 }
 
+const LOTUS_PHASE = 1 / 6
+
 export const gaiwanDesigns: CupDesign[] = [
   {
     id: 'yunwen',
@@ -111,7 +116,8 @@ export const gaiwanDesigns: CupDesign[] = [
     id: 'lianban',
     name: 'Lotus petals',
     nativeName: 'Lianban · 莲瓣',
-    note: 'A fan of five broad, pointed petals, inspired by lotus decoration and the lotus panels rising from Chinese bowl feet. This is a decorative interpretation, not a reproduction of the Eight Buddhist Emblems.',
+    previewCenter: LOTUS_PHASE,
+    note: 'Five broad, pointed petals with clear gaps. Three spacious fans sit symmetrically beside the face and at the back, leaving the area under the eyes clear. A decorative interpretation, not a reproduction of the Eight Buddhist Emblems.',
     sources: [
       { title: 'British Museum · Bowl with overlapping lotus panels', url: 'https://www.britishmuseum.org/collection/object/A_PDF-B-658' },
       { title: 'Wing Hop Fung · Blue-and-white lotus gaiwan', url: 'https://winghopfung.com/products/blue-and-white-intertwined-lotus-gaiwan' }
@@ -119,8 +125,8 @@ export const gaiwanDesigns: CupDesign[] = [
     draw(width, height) {
       const petalHeight = height * 0.9
       const w = height * 0.3
-      return around(width, 4, 0, x =>
-        `<g transform="translate(${n(x)} ${n(height * 0.94)})" fill="var(--ink-a)" stroke="var(--body)" stroke-width="${n(height * 0.055)}" stroke-linejoin="round">`
+      return around(width, 3, width * LOTUS_PHASE, x =>
+        `<g transform="translate(${n(x)} ${n(height * 0.94)}) scale(1.2 1)" fill="var(--ink-a)" stroke="var(--body)" stroke-width="${n(height * 0.07)}" stroke-linejoin="round">`
         + [-64, 64, -32, 32, 0].map(angle =>
           `<path transform="rotate(${angle})" d="M 0 0 C ${n(-w)} ${n(-petalHeight * 0.25)} ${n(-w)} ${n(-petalHeight * 0.7)} 0 ${n(-petalHeight)} C ${n(w)} ${n(-petalHeight * 0.7)} ${n(w)} ${n(-petalHeight * 0.25)} 0 0 Z"/>`).join('')
         + '</g>')
@@ -140,6 +146,78 @@ export const gaiwanDesigns: CupDesign[] = [
         `<g transform="translate(${n(x)} 0) scale(${n(width / 6000)} ${n(height / 500)})" fill="none" stroke="var(--ink-a)" stroke-width="110" stroke-linejoin="miter" stroke-linecap="square">`
         + '<path d="M -500 425 H 500 V 75 H -300 V 250 H 180"/>'
         + '</g>')
+    }
+  }
+]
+
+const COLOMBIAN_GRAPHICS = 'https://www.americanistas.es/wp-content/uploads/2024/10/19-005-Ballestas-Rincon-Luz-Helena-Relaciones-formales-de-la-grafica-precolombina-de-Colombia-Mexico-y-Peru-Congreso-Santiago-de-Compostela-Universidade-de-Santiago-de-Compostela-2022-1.pdf'
+const RAQUIRA_POTTERY = {
+  title: 'Artesanías de Colombia · Ráquira pottery context, not motif attribution',
+  url: 'https://artesaniasdecolombia.com.co/PortalAC/Noticia/colombia-artesanal-raquira-de-arcilla-a-objeto-artesanal_6273'
+}
+const terracotta = palette.find(option => option.id === 'terracotta')!.colors
+
+export const colombianColors: Record<string, string> & DesignInks = {
+  ...terracotta, background: terracotta.body, inkA: '#f3eadb', inkB: '#f3eadb'
+}
+
+export const colombianDesigns: CupDesign[] = [
+  {
+    id: 'colombia-stepped',
+    name: 'Stepped band',
+    nativeName: 'Banda escalonada',
+    previewCenter: 1 / 12,
+    note: 'The supplied reference’s broad stepped band, with two stair levels and a separate upper rule. The study links Colombian ceramic geometric families; it does not authenticate this exact modern composition or assign it a community-specific meaning.',
+    sources: [
+      { title: 'L. H. Ballestas Rincón · Colombian ceramic examples, fig. 1 / p. 44', url: `${COLOMBIAN_GRAPHICS}#page=2` },
+      RAQUIRA_POTTERY
+    ],
+    draw(width, height) {
+      const period = width / 6
+      return `<rect y="${n(height * 0.02)}" width="${n(width)}" height="${n(height * 0.12)}" fill="var(--ink-a)"/>`
+        + around(width, 6, period / 2, x =>
+          `<path d="M ${n(x - period * 0.5)} ${n(height * 0.36)} H ${n(x - period * 0.34)} V ${n(height * 0.59)} H ${n(x - period * 0.18)} V ${n(height * 0.82)} H ${n(x + period * 0.18)} V ${n(height * 0.59)} H ${n(x + period * 0.34)} V ${n(height * 0.36)} H ${n(x + period * 0.5)}" fill="none" stroke="var(--ink-a)" stroke-width="${n(height * 0.18)}" stroke-linejoin="miter" stroke-linecap="square"/>`)
+    }
+  },
+  {
+    id: 'colombia-square-spirals',
+    name: 'Square spirals',
+    nativeName: 'Espirales cuadradas',
+    note: 'Large open square spirals and a separate upper rule, following the supplied mug reference. The comparative study documents the spiral family, not the provenance of this exact band; no sacred meaning or traditional repeat count is claimed.',
+    sources: [
+      { title: 'L. H. Ballestas Rincón · Colombian spiral morphology, fig. 5 / p. 45', url: `${COLOMBIAN_GRAPHICS}#page=3` },
+      RAQUIRA_POTTERY
+    ],
+    draw(width, height) {
+      const period = width / 8
+      return `<rect y="${n(height * 0.02)}" width="${n(width)}" height="${n(height * 0.12)}" fill="var(--ink-a)"/>`
+        + around(width, 8, 0, x =>
+          `<path d="M ${n(x - period * 0.4)} ${n(height * 0.92)} V ${n(height * 0.28)} H ${n(x + period * 0.38)} V ${n(height * 0.92)} H ${n(x - period * 0.16)} V ${n(height * 0.49)} H ${n(x + period * 0.14)} V ${n(height * 0.71)} H ${n(x + period * 0.04)}" fill="none" stroke="var(--ink-a)" stroke-width="${n(height * 0.12)}" stroke-linejoin="miter" stroke-linecap="square"/>`)
+    }
+  },
+  {
+    id: 'colombia-diagonals',
+    name: 'Diagonal band',
+    nativeName: 'Triángulos y diagonales',
+    previewCenter: 0.14,
+    note: 'Closed upright and inverted triangles alternate with groups of parallel diagonal lines between two rules, following the supplied sketch. Thick strokes and open triangle centres keep the band readable at a distance; no community-specific meaning is claimed.',
+    sources: [
+      { title: 'L. H. Ballestas Rincón · Colombian ceramic examples, fig. 1 / p. 44', url: `${COLOMBIAN_GRAPHICS}#page=2` },
+      RAQUIRA_POTTERY
+    ],
+    draw(width, height) {
+      const period = width / 2
+      return [0.01, 0.87].map(y =>
+        `<rect y="${n(height * y)}" width="${n(width)}" height="${n(height * 0.12)}" fill="var(--ink-a)"/>`).join('')
+        + around(width, 2, -period * 0.4, x =>
+          `<g transform="translate(${n(x)} 0)" fill="none" stroke="var(--ink-a)" stroke-width="${n(height * 0.14)}" stroke-linejoin="round" stroke-linecap="butt">`
+          + `<path d="M ${n(period * 0.015)} ${n(height * 0.74)} L ${n(period * 0.135)} ${n(height * 0.36)} L ${n(period * 0.255)} ${n(height * 0.74)} Z"/>`
+          + `<path d="M ${n(period * 0.575)} ${n(height * 0.26)} L ${n(period * 0.815)} ${n(height * 0.26)} L ${n(period * 0.695)} ${n(height * 0.64)} Z"/>`
+          + [0.17, 0.29, 0.41].map(start =>
+            `<path d="M ${n(period * start)} ${n(height * 0.07)} L ${n(period * (start + 0.25))} ${n(height * 0.93)}"/>`).join('')
+          + [0.73, 0.85].map(start =>
+            `<path d="M ${n(period * start)} ${n(height * 0.93)} L ${n(period * (start + 0.25))} ${n(height * 0.07)}"/>`).join('')
+          + '</g>')
     }
   }
 ]
@@ -166,5 +244,6 @@ function decoratedVessel(id: string, colors: DesignCollection['colors'], centerY
 
 export const designCollections: DesignCollection[] = [
   { id: 'japan', label: 'Japan · Yunomi', vessel: decoratedVessel('yunomi', designColors, 1.12), colors: designColors, colorDescription: 'cream on navy', designs: yunomiDesigns },
-  { id: 'china', label: 'China · Gaiwan', vessel: decoratedVessel('gaiwan', gaiwanColors, 1), colors: gaiwanColors, colorDescription: 'blue on ivory', designs: gaiwanDesigns }
+  { id: 'china', label: 'China · Gaiwan', vessel: decoratedVessel('gaiwan', gaiwanColors, 1), colors: gaiwanColors, colorDescription: 'blue on ivory', designs: gaiwanDesigns },
+  { id: 'colombia', label: 'Colombia · Clay mug', vessel: decoratedVessel('colombian-mug', colombianColors, 1.16), colors: colombianColors, colorDescription: 'cream on terracotta', designs: colombianDesigns }
 ]

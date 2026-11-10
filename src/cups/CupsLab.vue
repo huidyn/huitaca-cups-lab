@@ -48,15 +48,17 @@ let galleryVesselId: string | undefined
 let disposed = false
 let media: MediaQueryList
 
-// Vignette du motif à plat, centrée sous le visage, dans les vraies couleurs.
+// Vignette centrée sur une figure, même lorsque la bande dégage le visage.
 const thumbnails = computed(() => {
   const band = designVessel.value.pattern!
   const part = designVessel.value.parts.find(part => part.id === band.surface)!
   const layout = bandLayout(part.outline, band)
   const size = { viewWidth: Math.round(layout.circumference * 1000), viewHeight: Math.round(layout.length * 1000) }
-  const view: [number, number, number, number] = [-size.viewWidth * 0.12, 0, size.viewWidth * 0.24, size.viewHeight]
-  return Object.fromEntries(collection.value.designs.map(option => [option.id,
-    `data:image/svg+xml;charset=utf-8,${encodeURIComponent(designSvg(option.draw(size.viewWidth, size.viewHeight), size.viewWidth, size.viewHeight, [120, 84], collection.value.colors, view))}`]))
+  return Object.fromEntries(collection.value.designs.map(option => {
+    const view: [number, number, number, number] = [size.viewWidth * ((option.previewCenter ?? 0) - 0.12), 0, size.viewWidth * 0.24, size.viewHeight]
+    return [option.id,
+      `data:image/svg+xml;charset=utf-8,${encodeURIComponent(designSvg(option.draw(size.viewWidth, size.viewHeight), size.viewWidth, size.viewHeight, [120, 84], collection.value.colors, view))}`]
+  }))
 })
 
 async function syncMotion() {

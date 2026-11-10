@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { Mesh, ShaderMaterial, Color } from 'three'
 import { vessels } from './catalogue'
 import { createCup } from './geometry'
-import { designCollections, designColors, gaiwanDesigns, yunomiDesigns } from './designs'
+import { colombianDesigns, designCollections, designColors, gaiwanDesigns, yunomiDesigns } from './designs'
 import { bandLayout, designSvg, MASK_INKS, maskWidth } from './pattern'
 import { maskDimensions } from './renderer'
 
@@ -89,8 +89,8 @@ describe('bold recolourable yunomi patterns', () => {
 
 describe('cultural pattern collections', () => {
   it('provides three designs per culture and keeps the grey source vessels unchanged', () => {
-    expect(designCollections.map(option => option.vessel.id)).toEqual(['yunomi', 'gaiwan'])
-    expect(new Set(designCollections.flatMap(option => option.designs.map(design => design.id))).size).toBe(6)
+    expect(designCollections.map(option => option.vessel.id)).toEqual(['yunomi', 'gaiwan', 'colombian-mug'])
+    expect(new Set(designCollections.flatMap(option => option.designs.map(design => design.id))).size).toBe(9)
     for (const option of designCollections) {
       expect(option.designs).toHaveLength(3)
       expect(option.vessel.colors.body).toBe(option.colors.background)
@@ -146,5 +146,113 @@ describe('cultural pattern collections', () => {
     expect(drawing).toContain('M -500 425 H 500 V 75 H -300 V 250 H 180')
     expect(250 - 75 - 110).toBeGreaterThan(110 / 2)
     expect(425 - 250 - 110).toBeGreaterThan(110 / 2)
+  })
+
+  it('widens the lotus fans and leaves more room between petals and repeats', () => {
+    const lotus = gaiwanDesigns.find(design => design.id === 'lianban')!
+    const drawing = lotus.draw(6000, 500)
+    expect(drawing.match(/<g /g)).toHaveLength(5)
+    expect(drawing.match(/<path /g)).toHaveLength(25)
+    expect(drawing.match(/scale\(1\.2 1\)/g)).toHaveLength(5)
+    expect(drawing.match(/stroke-width="35"/g)).toHaveLength(5)
+    expect(drawing).toContain('translate(3000 470)')
+  })
+
+  it('places the lotus fans symmetrically at the sides and back, not beneath the face', () => {
+    const lotus = gaiwanDesigns.find(design => design.id === 'lianban')!
+    const centres = [...lotus.draw(6000, 500).matchAll(/<g transform="translate\(([-\d.]+) /g)]
+      .map(match => ((Number(match[1]) % 6000) + 6000) % 6000)
+    expect([...new Set(centres)].sort((a, b) => a - b)).toEqual([1000, 3000, 5000])
+    expect(lotus.previewCenter).toBe(1 / 6)
+  })
+
+  it.each(colombianDesigns)('$name uses sourced, colour-independent geometry with copies across the seam', design => {
+    const vessel = designCollections.find(option => option.id === 'colombia')!.vessel
+    const size = maskDimensions(vessel, 100, 2048)
+    const drawing = design.draw(size.viewWidth, size.viewHeight)
+    const mask = designSvg(drawing, size.viewWidth, size.viewHeight, [size.width, size.height], MASK_INKS)
+    expect(mask).toContain('#f00')
+    expect(mask).not.toMatch(/var\(|NaN|undefined|#b5533c|<image|<text/)
+    expect(drawing).toMatch(/(?:M |translate\()-/)
+    expect(design.sources[0]!.url).toContain('Ballestas-Rincon')
+    expect(design.sources[0]!.url).toMatch(/#page=[234]$/)
+  })
+
+  it('keeps the stepped band, restores staged square spirals second, and retains diagonals third', () => {
+    expect(colombianDesigns.map(design => design.id)).toEqual([
+      'colombia-stepped', 'colombia-square-spirals', 'colombia-diagonals'
+    ])
+    const stepped = colombianDesigns[0]!
+    const drawing = stepped.draw(6000, 500)
+    expect(drawing).toContain('<rect y="10" width="6000" height="60"')
+    expect(drawing).toContain('M 0 180 H 160 V 295 H 320 V 410 H 680 V 295 H 840 V 180 H 1000')
+    expect(drawing.match(/stroke-width="90"/g)).toHaveLength(8)
+    expect(drawing).not.toContain('scale(')
+    expect(stepped.previewCenter).toBe(1 / 12)
+  })
+
+  it('restores the staged square-spiral geometry with its separate upper rule', () => {
+    const drawing = colombianDesigns[1]!.draw(8000, 500)
+    expect(drawing.match(/<path /g)).toHaveLength(10)
+    expect(drawing.match(/stroke-width="60"/g)).toHaveLength(10)
+    expect(drawing).toContain('<rect y="10" width="8000" height="60"')
+    expect(drawing).toContain('M -400 460 V 140 H 380 V 460 H -160 V 245 H 140 V 355 H 40')
+    expect(drawing).not.toContain('scale(')
+  })
+
+  it('alternates closed upright and inverted triangles with thick diagonals between two rails', () => {
+    const drawing = colombianDesigns[2]!.draw(4000, 500)
+    expect(drawing.match(/<rect /g)).toHaveLength(2)
+    expect(drawing.match(/<g /g)).toHaveLength(4)
+    expect(drawing.match(/<path /g)).toHaveLength(28)
+    expect(drawing.match(/ Z"/g)).toHaveLength(8)
+    expect(drawing).toContain('M 30 370 L 270 180 L 510 370 Z')
+    expect(drawing).toContain('M 1150 130 L 1630 130 L 1390 320 Z')
+    for (const start of [340, 580, 820]) {
+      expect(drawing).toContain(`M ${start} 35 L ${start + 500} 465`)
+    }
+    for (const start of [1460, 1700]) {
+      expect(drawing).toContain(`M ${start} 465 L ${start + 500} 35`)
+    }
+    expect(drawing.match(/stroke-width="70"/g)).toHaveLength(4)
+    expect(drawing.match(/stroke-linejoin="round" stroke-linecap="butt"/g)).toHaveLength(4)
+    expect(drawing).not.toMatch(/scale\(|\d [HV] /)
+  })
+
+  it('centres triangles between the neighbouring diagonals and joins every line to both rails', () => {
+    const drawing = colombianDesigns[2]!.draw(4000, 500)
+    const paths = [...drawing.matchAll(/<path d="([^"]+)"/g)].slice(0, 7)
+      .map(match => [...match[1]!.matchAll(/-?\d+(?:\.\d+)?/g)].map(value => Number(value[0])))
+    const [upright, inverted, firstFalling, , lastFalling, firstRising, lastRising] = paths as number[][]
+    const centre = (triangle: number[]) => (triangle[0]! + triangle[2]! + triangle[4]!) / 3
+    expect(centre(upright!)).toBe((firstFalling![0]! + lastRising![2]! - 2000) / 2)
+    expect(centre(upright!)).toBe((firstFalling![2]! + lastRising![0]! - 2000) / 2)
+    expect(centre(inverted!)).toBe((lastFalling![0]! + firstRising![2]!) / 2)
+    expect(centre(inverted!)).toBe((lastFalling![2]! + firstRising![0]!) / 2)
+    const rails = [...drawing.matchAll(/<rect y="([\d.]+)" width="[\d.]+" height="([\d.]+)"/g)]
+      .map(match => Number(match[1]) + Number(match[2]) / 2)
+    for (const line of paths.slice(2)) expect([line[1], line[3]].sort((a, b) => a! - b!)).toEqual(rails)
+  })
+
+  it('keeps the Colombian handle, geometry and mask budget unchanged', () => {
+    const vessel = designCollections.find(option => option.id === 'colombia')!.vessel
+    const original = vessels.find(vessel => vessel.id === 'colombian-mug')!
+    expect(vessel.handle).toEqual(original.handle)
+    const plain = createCup(original)
+    const decorated = createCup(vessel, { pattern: true })
+    try {
+      expect(decorated.root.children.length).toBe(plain.root.children.length)
+      const before = plain.root.getObjectByName('body') as Mesh
+      const after = decorated.root.getObjectByName('body') as Mesh
+      expect(after.geometry.attributes.position!.count).toBe(before.geometry.attributes.position!.count)
+      expect(after.material).toBeInstanceOf(ShaderMaterial)
+      const size = maskDimensions(vessel, 10000, 2048)
+      expect(size.width).toBe(2048)
+      const yunomiSize = maskDimensions(designCollections[0]!.vessel, 10000, 2048)
+      expect(size.width * size.height).toBeLessThanOrEqual(yunomiSize.width * yunomiSize.height)
+    } finally {
+      plain.dispose()
+      decorated.dispose()
+    }
   })
 })

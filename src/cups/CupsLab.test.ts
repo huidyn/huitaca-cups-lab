@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import CupsLab from './CupsLab.vue'
 import { vessels } from './catalogue'
 import { palette } from './palette'
-import { gaiwanDesigns, yunomiDesigns } from './designs'
+import { colombianDesigns, gaiwanDesigns, yunomiDesigns } from './designs'
 import { createCupGallery } from './renderer'
 
 const gallery = vi.hoisted(() => ({
@@ -222,25 +222,52 @@ describe('cup lab cultural section', () => {
     expect(vi.mocked(createCupGallery).mock.calls.at(-1)![1][0]!.design).toBe(gaiwanDesigns[2])
   })
 
-  it('keeps manual rotation available for both cultures with reduced motion', async () => {
-    await mount(true)
+  it('shows the Colombian reference patterns and remembers the selected band', async () => {
+    await mount()
     await chooseStudy('Designs')
-    await chooseCulture('china')
-    expect(root.querySelector('[aria-label="Turn the cup"]')).not.toBeNull()
-    expect(root.querySelector('.cup-canvas')?.classList.contains('is-hidden')).toBe(false)
-    expect(root.textContent).not.toContain('Slow turn')
-    expect(vi.mocked(createCupGallery).mock.calls.at(-1)![1][0]!.vessel.id).toBe('gaiwan')
+    await chooseCulture('colombia')
+    expect(root.querySelectorAll('.study-nav button')).toHaveLength(3)
+    expect(root.querySelectorAll('input[name="cup-design"]')).toHaveLength(3)
+    const view = vi.mocked(createCupGallery).mock.calls.at(-1)![1][0]!
+    expect(view.vessel.id).toBe('colombian-mug')
+    expect(view.vessel.colors.inkA).toBe('#f3eadb')
+    expect(view.design).toBe(colombianDesigns[0])
+    for (const design of colombianDesigns) {
+      root.querySelector<HTMLInputElement>(`input[value="${design.id}"]`)!.click()
+      await nextTick()
+      expect(root.querySelector('figcaption')?.textContent).toContain(design.name)
+      expect(root.querySelector('.culture-sources')?.textContent).toContain(design.note)
+    }
+    expect(gallery.setDesign).toHaveBeenLastCalledWith(0, colombianDesigns[2])
+    await chooseCulture('japan')
+    await chooseCulture('colombia')
+    expect(root.querySelector<HTMLInputElement>('input[value="colombia-diagonals"]')!.checked).toBe(true)
+    expect(vi.mocked(createCupGallery).mock.calls.at(-1)![1][0]!.design).toBe(colombianDesigns[2])
   })
 
-  it('uses the matching gaiwan PNGs when WebGL is unavailable', async () => {
+  it('keeps manual rotation available for all cultures with reduced motion', async () => {
+    await mount(true)
+    await chooseStudy('Designs')
+    for (const [culture, vessel] of [['china', 'gaiwan'], ['colombia', 'colombian-mug'], ['japan', 'yunomi']]) {
+      await chooseCulture(culture!)
+      expect(root.querySelector('[aria-label="Turn the cup"]')).not.toBeNull()
+      expect(root.querySelector('.cup-canvas')?.classList.contains('is-hidden')).toBe(false)
+      expect(root.textContent).not.toContain('Slow turn')
+      expect(vi.mocked(createCupGallery).mock.calls.at(-1)![1][0]!.vessel.id).toBe(vessel)
+    }
+  })
+
+  it('uses the matching cultural PNGs when WebGL is unavailable', async () => {
     await mount()
     vi.mocked(createCupGallery).mockImplementationOnce(() => { throw new Error('WebGL unavailable') })
     await chooseStudy('Designs')
-    await chooseCulture('china')
-    for (const design of gaiwanDesigns) {
-      root.querySelector<HTMLInputElement>(`input[value="${design.id}"]`)!.click()
-      await nextTick()
-      expect(root.querySelector('.cup-viewport img')?.getAttribute('src')).toBe(`/cups/stills/designs/${design.id}.png`)
+    for (const [culture, designs] of [['china', gaiwanDesigns], ['colombia', colombianDesigns]] as const) {
+      await chooseCulture(culture)
+      for (const design of designs) {
+        root.querySelector<HTMLInputElement>(`input[value="${design.id}"]`)!.click()
+        await nextTick()
+        expect(root.querySelector('.cup-viewport img')?.getAttribute('src')).toBe(`/cups/stills/designs/${design.id}.png`)
+      }
     }
     expect(root.querySelector('[aria-label="Turn the cup"]')).toBeNull()
     expect(createCupGallery).toHaveBeenCalledTimes(2)
