@@ -9,6 +9,7 @@ vi.mock('three', async importOriginal => {
     ...original,
     WebGLRenderer: class {
       ratio = 1
+      capabilities = { maxTextureSize: 4096, getMaxAnisotropy: () => 8 }
       canvas: HTMLCanvasElement
       constructor({ canvas }: { canvas: HTMLCanvasElement }) { this.canvas = canvas }
       setClearColor() {}
@@ -129,6 +130,43 @@ describe('on-demand cup renderer', () => {
     gallery.setTurning(true)
     step()
     gallery.dispose()
+    expect(queue.size).toBe(0)
+  })
+
+  it('turns through a full revolution by keyboard without mouse-follow or idle work', () => {
+    gallery.dispose()
+    const onTurn = vi.fn()
+    gallery = createCupGallery(canvas, [{ element: canvas, vessel: vessels[0]! }], { turntable: true, onTurn })
+    step()
+    window.dispatchEvent(new PointerEvent('pointermove', { clientX: 600, pointerType: 'mouse' }))
+    expect(queue.size).toBe(0)
+    for (let i = 0; i < 24; i++) {
+      canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }))
+      step()
+    }
+    expect(onTurn.mock.calls.map(call => call[0])).toContain(180)
+    expect(onTurn).toHaveBeenLastCalledWith(0)
+    expect(queue.size).toBe(0)
+    canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft' }))
+    expect(onTurn).toHaveBeenLastCalledWith(345)
+    canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home' }))
+    expect(onTurn).toHaveBeenLastCalledWith(0)
+  })
+
+  it('allows manual dragging with reduced motion and ends dragging on lost capture', () => {
+    gallery.dispose()
+    media.matches = true
+    const onTurn = vi.fn()
+    gallery = createCupGallery(canvas, [{ element: canvas, vessel: vessels[0]! }], { turntable: true, onTurn })
+    step()
+    canvas.dispatchEvent(new PointerEvent('pointerdown', { button: 0, pointerId: 1, clientX: 10 }))
+    canvas.dispatchEvent(new PointerEvent('pointermove', { pointerId: 1, clientX: 110 }))
+    expect(onTurn).toHaveBeenLastCalledWith(69)
+    canvas.dispatchEvent(new PointerEvent('lostpointercapture', { pointerId: 1 }))
+    canvas.dispatchEvent(new PointerEvent('pointermove', { pointerId: 1, clientX: 210 }))
+    expect(onTurn).toHaveBeenCalledOnce()
+    gallery.setTurning(true)
+    step()
     expect(queue.size).toBe(0)
   })
 })

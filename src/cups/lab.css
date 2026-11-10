@@ -78,6 +78,11 @@ a { color: inherit; }
 .palette-option:focus-within { outline: 2px solid var(--lab-text); outline-offset: 3px; }
 .colour-swatch { display: block; width: 28px; height: 28px; flex-shrink: 0; border-radius: 50%; border: 1px solid rgb(128 128 128 / 0.25); }
 .palette-option small { display: block; margin-top: 4px; color: var(--lab-muted); font-size: 9px; letter-spacing: 0.3px; }
+.design-options { display: grid; gap: 8px; }
+.design-option { gap: 14px; font-size: 13px; }
+.design-swatch { display: block; width: 72px; height: 50px; flex-shrink: 0; border-radius: 4px; }
+.cup-viewport.is-turntable { cursor: grab; touch-action: none; border-radius: 8px; }
+.cup-viewport.is-turntable:active { cursor: grabbing; }
 .palette-note { font-size: 11px; color: var(--lab-muted); margin: 22px 0 0; line-height: 1.6; }
 .study-controls { display: flex; justify-content: space-between; align-items: center; gap: 24px; margin-top: 55px; padding-top: 22px; border-top: 1px solid var(--lab-border); }
 .interaction-hint { color: var(--lab-muted); font-size: 12px; margin: 0; }
@@ -93,7 +98,7 @@ a { color: inherit; }
 .lab-footer span:first-child { letter-spacing: 1.4px; }
 @media (width < 64rem) {
   .lab-layout { display: block; }
-  .study-nav { flex-direction: row; padding-top: 24px; }
+  .study-nav { flex-direction: row; flex-wrap: wrap; padding-top: 24px; }
   .cup-stage { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 36px 4px; }
   .cup-study { padding: 32px 0 48px; }
   .study-heading { margin-bottom: 24px; }

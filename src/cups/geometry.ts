@@ -1,9 +1,11 @@
 import {
-  BufferGeometry, CatmullRomCurve3, DoubleSide, Float32BufferAttribute,
-  Group, LatheGeometry, Mesh, MeshBasicMaterial, TubeGeometry, Vector2, Vector3
+  BufferGeometry, CanvasTexture, CatmullRomCurve3, ClampToEdgeWrapping, Color, DoubleSide,
+  Float32BufferAttribute, Group, LatheGeometry, Mesh, MeshBasicMaterial, RepeatWrapping,
+  ShaderMaterial, Texture, TubeGeometry, Vector2, Vector3
 } from 'three'
 import type { Point2, VesselDefinition } from './types'
 import { createLidGeometry } from './lid'
+import { bandLayout } from './pattern'
 
 export function radiusAtY(outline: Point2[], y: number): number {
   for (let i = 1; i < outline.length; i++) {
@@ -14,6 +16,42 @@ export function radiusAtY(outline: Point2[], y: number): number {
     }
   }
   throw new Error(`Face outside the vessel outline at y=${y}`)
+}
+
+const patternVertex = `
+varying vec2 vBand;
+void main() {
+  vBand = uv;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}`
+
+// Couleurs en uniformes, masque en données : changer d'encre ne redessine rien.
+const patternFragment = `
+uniform vec3 body;
+uniform vec3 inkA;
+uniform vec3 inkB;
+uniform sampler2D mask;
+uniform float masked;
+varying vec2 vBand;
+void main() {
+  vec4 m = texture2D(mask, vBand) * masked * step(0.0, vBand.y) * step(vBand.y, 1.0);
+  gl_FragColor = vec4(mix(mix(body, inkA, m.r), inkB, m.g), 1.0);
+  #include <colorspace_fragment>
+}`
+
+function createPatternMaterial(colors: Record<string, string>, slot: string) {
+  return new ShaderMaterial({
+    uniforms: {
+      body: { value: new Color(colors[slot]) },
+      inkA: { value: new Color(colors.inkA ?? colors[slot]) },
+      inkB: { value: new Color(colors.inkB ?? colors[slot]) },
+      mask: { value: null as Texture | null },
+      masked: { value: 0 }
+    },
+    vertexShader: patternVertex,
+    fragmentShader: patternFragment,
+    side: DoubleSide
+  })
 }
 
 export function createHandleGeometry(handle: NonNullable<VesselDefinition['handle']>) {
@@ -51,7 +89,7 @@ export function createHandleGeometry(handle: NonNullable<VesselDefinition['handl
   return geometry
 }
 
-export function createCup(definition: VesselDefinition) {
+export function createCup(definition: VesselDefinition, options: { pattern?: boolean } = {}) {
   const root = new Group()
   const materials = new Map<string, MeshBasicMaterial>()
   const material = (slot: string) => {
@@ -65,9 +103,23 @@ export function createCup(definition: VesselDefinition) {
     return found
   }
 
+  const band = options.pattern ? definition.pattern : undefined
+  let patternMaterial: ShaderMaterial | undefined
+  let patternSlot = ''
   for (const part of definition.parts) {
     const geometry = new LatheGeometry(part.outline.map(([r, y]) => new Vector2(r, y)), 96)
-    const mesh = new Mesh(geometry, material(part.color))
+    if (band && part.id === band.surface) {
+      // u fait le tour depuis le visage (u = 0) ; les sommets de la jointure sont doublés
+      // en u = 0 et u = 1, donc aucun triangle n'interpole à travers elle.
+      const { v } = bandLayout(part.outline, band)
+      const uv = geometry.attributes.uv!
+      const rows = part.outline.length
+      for (let i = 0; i < uv.count; i++) uv.setY(i, v[i % rows]!)
+      uv.needsUpdate = true
+      patternSlot = part.color
+      patternMaterial = createPatternMaterial(definition.colors, part.color)
+    }
+    const mesh = new Mesh(geometry, band && part.id === band.surface ? patternMaterial! : material(part.color))
     mesh.name = part.id
     root.add(mesh)
   }
@@ -156,12 +208,34 @@ export function createCup(definition: VesselDefinition) {
       materials.forEach((material, slot) => {
         if (colors[slot]) material.color.set(colors[slot])
       })
+      if (patternMaterial) {
+        const u = patternMaterial.uniforms
+        if (colors[patternSlot]) u.body!.value.set(colors[patternSlot])
+        if (colors.inkA) u.inkA!.value.set(colors.inkA)
+        if (colors.inkB) u.inkB!.value.set(colors.inkB)
+      }
+    },
+    setMask(canvas: HTMLCanvasElement | null, anisotropy = 1) {
+      if (!patternMaterial) return
+      const u = patternMaterial.uniforms
+      ;(u.mask!.value as Texture | null)?.dispose()
+      u.mask!.value = null
+      u.masked!.value = 0
+      if (!canvas) return
+      const texture = new CanvasTexture(canvas)
+      texture.wrapS = RepeatWrapping
+      texture.wrapT = ClampToEdgeWrapping
+      texture.anisotropy = anisotropy
+      u.mask!.value = texture
+      u.masked!.value = 1
     },
     dispose() {
       root.traverse(object => {
         if (object instanceof Mesh) object.geometry.dispose()
       })
       materials.forEach(m => m.dispose())
+      ;(patternMaterial?.uniforms.mask!.value as Texture | null)?.dispose()
+      patternMaterial?.dispose()
     }
   }
 }

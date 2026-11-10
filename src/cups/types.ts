@@ -1,6 +1,12 @@
 export type Point2 = [number, number]
 export type Point3 = [number, number, number]
 
+export interface PatternBand {
+  surface: string
+  from: number
+  to: number
+}
+
 export interface RevolvedPart {
   id: string
   outline: Point2[]
@@ -42,6 +48,8 @@ export interface VesselDefinition {
   colors: Record<string, string>
   parts: RevolvedPart[]
   lid?: LidDefinition
+  // Zone de paroi qui peut porter un motif, sous les yeux.
+  pattern?: PatternBand
   handle: {
     points: Point3[]
     radius: number

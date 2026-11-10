@@ -4,16 +4,21 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import CupsLab from './CupsLab.vue'
 import { vessels } from './catalogue'
 import { palette } from './palette'
+import { yunomiDesigns } from './designs'
 import { createCupGallery } from './renderer'
 
 const gallery = vi.hoisted(() => ({
   setColors: vi.fn(),
+  setDesign: vi.fn(),
   setElevation: vi.fn(),
   setTurning: vi.fn(),
   dispose: vi.fn()
 }))
 
-vi.mock('./renderer', () => ({ createCupGallery: vi.fn(() => gallery) }))
+vi.mock('./renderer', async importOriginal => ({
+  ...await importOriginal<typeof import('./renderer')>(),
+  createCupGallery: vi.fn(() => gallery)
+}))
 
 describe('cup lab cultural section', () => {
   let app: ReturnType<typeof createApp>
@@ -133,6 +138,31 @@ describe('cup lab cultural section', () => {
     await nextTick()
     expect(root.querySelector('main')?.getAttribute('data-theme')).toBe('light')
     expect(root.querySelector('[aria-label="Background"]')).toBeNull()
+  })
+
+  it('shows only the yunomi with a raised face, three patterns, and a manual turntable', async () => {
+    await mount()
+    await chooseStudy('Designs')
+    expect(root.querySelectorAll('.cup-viewport')).toHaveLength(1)
+    expect(root.querySelectorAll('input[name="cup-design"]')).toHaveLength(3)
+    const call = vi.mocked(createCupGallery).mock.calls.at(-1)!
+    expect(call[1][0]!.vessel.id).toBe('yunomi')
+    expect(call[1][0]!.vessel.face.centerY).toBe(1.12)
+    expect(vessels.find(vessel => vessel.id === 'yunomi')!.face.centerY).toBe(1)
+    expect(call[2]?.turntable).toBe(true)
+    expect(root.querySelector('[role="slider"]')?.getAttribute('tabindex')).toBe('0')
+    for (const option of yunomiDesigns) {
+      root.querySelector<HTMLInputElement>(`input[value="${option.id}"]`)!.click()
+      await nextTick()
+    }
+    expect(gallery.setDesign).toHaveBeenLastCalledWith(0, yunomiDesigns[2])
+    expect(createCupGallery).toHaveBeenCalledTimes(2)
+    media.matches = true
+    media.dispatchEvent(new Event('change'))
+    await nextTick()
+    expect(root.querySelector('[role="slider"]')).not.toBeNull()
+    expect(root.querySelector('img[src^="/cups/stills/"]')).toBeNull()
+    expect(root.textContent).not.toContain('Slow turn')
   })
 
   it('lets reduced-motion visitors select all colours using matching static mug previews', async () => {

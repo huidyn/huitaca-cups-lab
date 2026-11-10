@@ -1,5 +1,33 @@
 # Huitaca Cups lab
 
+## Yunomi pattern study
+
+- Designs shows only the yunomi, with a shared navy/cream scheme and three
+  deliberately bold interpretations: seigaiha waves, tokusa stripes and
+  mizutama dots. Sources are linked in the pattern notes. Repeat counts are
+  composition choices, not claims about culturally prescribed numbers.
+- Waves use two thick arcs per unit and half-radius row spacing so successive
+  rows overlap rather than appearing as separated rings. Stripes use ten
+  repeats; dots use two staggered rows of six.
+- The Designs face centre is raised from 1.00 to 1.12, leaving over 0.15 units
+  between the eyes and pattern band. Shapes and its grey yunomi are unchanged.
+- Drag or arrow keys turn the cup through 360 degrees; Home returns to the
+  front. No mouse-follow in Designs. Slow turn is optional and stops when the
+  document is hidden or reduced motion is enabled. Manual rotation still works
+  with reduced motion.
+- SVG masters rasterize into channel masks at 25% above the projected pixel
+  density in each direction, in 128-pixel screen-size buckets capped at
+  2048 pixels wide. The mask follows wall arc length vertically and repeats
+  around the circumference. Colours remain shader uniforms; recolouring does
+  not regenerate the mask. This adds texture memory and sampling, not lights,
+  shadows, a second mesh or a second pass. Finite resolution is not lossless.
+- WebGL-unavailable previews use matching PNGs in `public/cups/stills/designs`.
+  Reduced-motion Designs stays interactive without automatic animation.
+- Added coverage for wave overlap, mask resolution, seam vertices, recolouring,
+  full keyboard turns, lost pointer capture, and the three-choice picker.
+  The focused cup suite has 99 passing tests; strict TypeScript and the
+  production build pass. The existing lazy-renderer chunk-size warning remains.
+
 ## Separate form and colour studies
 
 - Shapes stays an eighteen-vessel grey gallery, including its original static
