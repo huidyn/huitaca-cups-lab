@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { Mesh, ShaderMaterial, Color } from 'three'
 import { vessels } from './catalogue'
 import { createCup } from './geometry'
-import { colombianDesigns, designCollections, designColors, gaiwanDesigns, yunomiDesigns } from './designs'
+import { cayDesigns, colombianDesigns, designCollections, designColors, gaiwanDesigns, yunomiDesigns } from './designs'
 import { bandLayout, designSvg, MASK_INKS, maskWidth } from './pattern'
 import { maskDimensions } from './renderer'
 
@@ -89,8 +89,8 @@ describe('bold recolourable yunomi patterns', () => {
 
 describe('cultural pattern collections', () => {
   it('provides three designs per culture and keeps the grey source vessels unchanged', () => {
-    expect(designCollections.map(option => option.vessel.id)).toEqual(['yunomi', 'gaiwan', 'colombian-mug'])
-    expect(new Set(designCollections.flatMap(option => option.designs.map(design => design.id))).size).toBe(9)
+    expect(designCollections.map(option => option.vessel.id)).toEqual(['yunomi', 'gaiwan', 'colombian-mug', 'cay-glass'])
+    expect(new Set(designCollections.flatMap(option => option.designs.map(design => design.id))).size).toBe(12)
     for (const option of designCollections) {
       expect(option.designs).toHaveLength(3)
       expect(option.vessel.colors.body).toBe(option.colors.background)
@@ -234,9 +234,9 @@ describe('cultural pattern collections', () => {
     for (const line of paths.slice(2)) expect([line[1], line[3]].sort((a, b) => a! - b!)).toEqual(rails)
   })
 
-  it('keeps the Colombian handle, geometry and mask budget unchanged', () => {
-    const vessel = designCollections.find(option => option.id === 'colombia')!.vessel
-    const original = vessels.find(vessel => vessel.id === 'colombian-mug')!
+  it.each(['colombia', 'turkiye'])('%s preserves geometry and stays within the existing mask budget', culture => {
+    const vessel = designCollections.find(option => option.id === culture)!.vessel
+    const original = vessels.find(original => original.id === vessel.id)!
     expect(vessel.handle).toEqual(original.handle)
     const plain = createCup(original)
     const decorated = createCup(vessel, { pattern: true })
@@ -254,5 +254,52 @@ describe('cultural pattern collections', () => {
       plain.dispose()
       decorated.dispose()
     }
+  })
+
+  it.each(cayDesigns)('$name is a sourced, periodic, one-ink çay design', design => {
+    const vessel = designCollections.find(option => option.id === 'turkiye')!.vessel
+    const size = maskDimensions(vessel, 100, 2048)
+    const drawing = design.draw(size.viewWidth, size.viewHeight)
+    const svg = designSvg(drawing, size.viewWidth, size.viewHeight, [size.width, size.height], MASK_INKS)
+    expect(svg).toContain('#f00')
+    expect(svg).not.toMatch(/var\(|NaN|undefined|#2fa3a0|<image|<text|filter=/)
+    expect(drawing).toMatch(/(?:M |translate\(|points=")-/)
+    expect(drawing).not.toContain('var(--ink-b)')
+    expect(design.sources.length).toBeGreaterThan(0)
+  })
+
+  it('preserves the two reference patterns and replaces scales with Çintamani', () => {
+    expect(cayDesigns.map(design => design.id)).toEqual(['cay-stars', 'cay-diamonds', 'cay-cintamani'])
+    const stars = cayDesigns[0]!.draw(4000, 500)
+    const polygons = [...stars.matchAll(/<polygon points="([^"]+)"/g)]
+    expect(polygons).toHaveLength(10)
+    for (const polygon of polygons) expect(polygon[1]!.split(' ')).toHaveLength(16)
+    const diamonds = cayDesigns[1]!.draw(4000, 500)
+    expect(diamonds.match(/ Z"/g)).toHaveLength(10)
+    expect(diamonds).toContain('M -250 250 L 0 65 L 250 250 L 0 435 Z')
+  })
+
+  it('matches the tile’s alternating three-dot triangles and paired diagonal separators', () => {
+    const drawing = cayDesigns[2]!.draw(4000, 500)
+    const groups = [...drawing.matchAll(/<g [^>]+>(.*?)<\/g>/g)]
+    expect(groups).toHaveLength(4)
+    for (const group of groups) {
+      expect(group[1]!.match(/<circle /g)).toHaveLength(6)
+      expect(group[1]!.match(/<path /g)).toHaveLength(4)
+      for (const [x, y] of [[-110, 140], [110, 140], [0, 350], [1000, 150], [890, 360], [1110, 360]]) {
+        expect(group[1]).toContain(`cx="${x}" cy="${y}" r="70"`)
+      }
+      const separators = [...group[1]!.matchAll(/<path d="([^"]+)"/g)]
+        .map(match => [...match[1]!.matchAll(/-?\d+(?:\.\d+)?/g)].map(value => Number(value[0])))
+      for (const path of separators) {
+        expect(path[1]).toBe(30)
+        expect(path[7]).toBe(470)
+        expect(path[0]).not.toBe(path[6])
+      }
+      expect(separators.slice(0, 2).every(path => path[0]! > path[6]!)).toBe(true)
+      expect(separators.slice(2).every(path => path[0]! < path[6]!)).toBe(true)
+      expect(group[1]).not.toContain('stroke-linecap')
+    }
+    expect(cayDesigns[2]!.previewCenter).toBe(0)
   })
 })

@@ -1,10 +1,28 @@
 # Huitaca Cups lab
 
+## Çay glass pattern study
+
+- Türkiye / Çay glass joins Designs with eight-point stars, diamond lattice
+  and Çintamani. The first two retain the supplied illustration's geometry;
+  Çintamani replaces scales by request, rather than duplicating Japanese waves.
+  [Sources and adaptation notes](docs/cay-patterns.md).
+- One cream ink (`#f6f4ee`) on turquoise (`#2fa3a0`), with a flat gold rim
+  (`#c9a24b`). Çintamani follows the exact Met tile photograph: upright and
+  inverted three-roundel groups alternate between paired, tapered diagonal
+  separators. The earlier horizontal squiggles are removed.
+- Only the decorated face moves to Y=1.22. The Y=0.30–0.88 band leaves 0.165
+  units below the eyes. Grey Shapes, the saucer and original face stay intact.
+- Native 64px renders were inspected and all three 512px fallbacks use the
+  real renderer. Masks measure 896 × 123 at 512px, capped at 2048 × 280.
+  Geometry, shader, draw passes and resolution settings are unchanged.
+  These are texture dimensions and visual checks, not hardware benchmarks.
+- Full suite: 337 tests across 20 files pass, as do strict TypeScript and the
+  production build. The existing lazy-renderer chunk-size warning remains.
+
 ## Colombian pattern study
 
-- China checkpoint committed locally as `b0b3052`, without a push. The
-  subsequent lotus refinements and first Colombian version were staged as
-  requested; the new spiral and diagonal revisions remain unstaged.
+- China checkpoint committed locally as `b0b3052`; Colombian patterns and
+  subsequent lotus refinements committed as `7a08dc5`. Neither was pushed.
 - Colombia / Clay mug joins the existing culture selector. All three choices
   share terracotta `#b5533c` and cream `#f3eadb`, with unchanged grey Shapes.
 - The stepped band follows the supplied mug reference. The second choice
@@ -16,7 +34,7 @@
   units below the eyes. The handle, meshes, shader and resolution cap are
   unchanged. Masks measure 1024 × 136 for 512px exports, capped at 2048 × 272.
   Native 64px renders and matching 512px PNG fallbacks were checked.
-- Latest full suite: 330 tests across 20 files pass, as do strict TypeScript
+- Colombian checkpoint: 330 tests across 20 files pass, as do strict TypeScript
   and the production build. The existing lazy-renderer chunk warning remains.
   No low-end hardware frame-time measurement is claimed.
 

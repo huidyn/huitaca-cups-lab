@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import CupsLab from './CupsLab.vue'
 import { vessels } from './catalogue'
 import { palette } from './palette'
-import { colombianDesigns, gaiwanDesigns, yunomiDesigns } from './designs'
+import { cayDesigns, colombianDesigns, gaiwanDesigns, yunomiDesigns } from './designs'
 import { createCupGallery } from './renderer'
 
 const gallery = vi.hoisted(() => ({
@@ -245,10 +245,34 @@ describe('cup lab cultural section', () => {
     expect(vi.mocked(createCupGallery).mock.calls.at(-1)![1][0]!.design).toBe(colombianDesigns[2])
   })
 
+  it('adds the three çay designs, keeps the gold rim, and remembers Çintamani', async () => {
+    await mount()
+    await chooseStudy('Designs')
+    await chooseCulture('turkiye')
+    expect(root.querySelectorAll('.study-nav button')).toHaveLength(3)
+    expect(root.querySelectorAll('input[name="cup-design"]')).toHaveLength(3)
+    const view = vi.mocked(createCupGallery).mock.calls.at(-1)![1][0]!
+    expect(view.vessel.id).toBe('cay-glass')
+    expect(view.vessel.colors.body).toBe('#2fa3a0')
+    expect(view.vessel.colors.rim).toBe('#c9a24b')
+    expect(view.design).toBe(cayDesigns[0])
+    for (const design of cayDesigns) {
+      root.querySelector<HTMLInputElement>(`input[value="${design.id}"]`)!.click()
+      await nextTick()
+      expect(root.querySelector('figcaption')?.textContent).toContain(design.name)
+      expect(root.querySelector('.culture-sources')?.textContent).toContain(design.note)
+    }
+    expect(gallery.setDesign).toHaveBeenLastCalledWith(0, cayDesigns[2])
+    await chooseCulture('colombia')
+    await chooseCulture('turkiye')
+    expect(root.querySelector<HTMLInputElement>('input[value="cay-cintamani"]')!.checked).toBe(true)
+    expect(vi.mocked(createCupGallery).mock.calls.at(-1)![1][0]!.design).toBe(cayDesigns[2])
+  })
+
   it('keeps manual rotation available for all cultures with reduced motion', async () => {
     await mount(true)
     await chooseStudy('Designs')
-    for (const [culture, vessel] of [['china', 'gaiwan'], ['colombia', 'colombian-mug'], ['japan', 'yunomi']]) {
+    for (const [culture, vessel] of [['china', 'gaiwan'], ['colombia', 'colombian-mug'], ['turkiye', 'cay-glass'], ['japan', 'yunomi']]) {
       await chooseCulture(culture!)
       expect(root.querySelector('[aria-label="Turn the cup"]')).not.toBeNull()
       expect(root.querySelector('.cup-canvas')?.classList.contains('is-hidden')).toBe(false)
@@ -261,7 +285,7 @@ describe('cup lab cultural section', () => {
     await mount()
     vi.mocked(createCupGallery).mockImplementationOnce(() => { throw new Error('WebGL unavailable') })
     await chooseStudy('Designs')
-    for (const [culture, designs] of [['china', gaiwanDesigns], ['colombia', colombianDesigns]] as const) {
+    for (const [culture, designs] of [['china', gaiwanDesigns], ['colombia', colombianDesigns], ['turkiye', cayDesigns]] as const) {
       await chooseCulture(culture)
       for (const design of designs) {
         root.querySelector<HTMLInputElement>(`input[value="${design.id}"]`)!.click()

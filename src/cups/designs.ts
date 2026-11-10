@@ -222,6 +222,91 @@ export const colombianDesigns: CupDesign[] = [
   }
 ]
 
+export const cayColors: Record<string, string> & DesignInks = {
+  body: '#2fa3a0', inside: '#227e7b', rim: '#c9a24b', border: '#268d8a', eyes: '#f6f4ee',
+  background: '#2fa3a0', inkA: '#f6f4ee', inkB: '#f6f4ee'
+}
+
+function cayRules(width: number, height: number): string {
+  return [0.02, 0.9].map(y =>
+    `<rect y="${n(height * y)}" width="${n(width)}" height="${n(height * 0.08)}" fill="var(--ink-a)"/>`).join('')
+}
+
+export const cayDesigns: CupDesign[] = [
+  {
+    id: 'cay-stars',
+    name: 'Eight-point stars',
+    nativeName: 'Sekiz köşeli yıldızlar',
+    note: 'Bold eight-point star outlines linked into a border, preserving the supplied reference. Anatolian Seljuk star-shaped tiles at Kubadabad provide context; this is a new geometric interpretation, not a copy of their figures or royal imagery.',
+    sources: [
+      { title: 'Archnet · Kubadabad Palace, Anatolian Seljuk star tiles', url: 'https://www.archnet.org/sites/4018' },
+      { title: 'The Met · Geometric Patterns in Islamic Art', url: 'https://www.metmuseum.org/essays/geometric-patterns-in-islamic-art' }
+    ],
+    draw(width, height) {
+      const period = width / 8
+      const radius = height * 0.32
+      return cayRules(width, height) + around(width, 8, 0, x => {
+        const points = Array.from({ length: 16 }, (_, i) => {
+          const angle = i * Math.PI / 8
+          const r = radius * (i % 2 ? 0.68 : 1)
+          return `${n(x + Math.cos(angle) * r)},${n(height / 2 + Math.sin(angle) * r)}`
+        }).join(' ')
+        return `<polygon points="${points}" fill="none" stroke="var(--ink-a)" stroke-width="${n(height * 0.11)}" stroke-linejoin="miter"/>`
+          + `<path d="M ${n(x + radius)} ${n(height / 2)} H ${n(x + period - radius)}" fill="none" stroke="var(--ink-a)" stroke-width="${n(height * 0.11)}"/>`
+      })
+    }
+  },
+  {
+    id: 'cay-diamonds',
+    name: 'Diamond lattice',
+    nativeName: 'Baklava örgüsü',
+    note: 'A continuous chain of large open diamonds between two rules, following the supplied glass. A simple square-based geometric lattice, not a claim that this exact band is an exclusive or named historical Turkish pattern.',
+    sources: [
+      { title: 'The Met · Repeated and interlaced squares in Islamic geometric design', url: 'https://www.metmuseum.org/essays/geometric-patterns-in-islamic-art' }
+    ],
+    draw(width, height) {
+      const period = width / 8
+      return cayRules(width, height) + around(width, 8, 0, x =>
+        `<path d="M ${n(x - period / 2)} ${n(height / 2)} L ${n(x)} ${n(height * 0.13)} L ${n(x + period / 2)} ${n(height / 2)} L ${n(x)} ${n(height * 0.87)} Z" fill="none" stroke="var(--ink-a)" stroke-width="${n(height * 0.13)}" stroke-linejoin="miter"/>`)
+    }
+  },
+  {
+    id: 'cay-cintamani',
+    name: 'Çintamani',
+    nativeName: 'Üç benek ve dalgalı çizgiler',
+    previewCenter: 0,
+    note: 'Upright and inverted three-roundel groups alternate between paired, tapered diagonal stripes, following the exact İznik tile photograph. Small coloured centres are omitted for readability. The arrangement remains a contemporary interpretation, not a historical tea-glass reproduction.',
+    sources: [
+      { title: 'The Met · İznik tile with Çintamani design, ca. 1560–70', url: 'https://www.metmuseum.org/art/collection/search/823310' },
+      { title: 'The Met · Exact tile photograph, DP-19634-001', url: 'https://images.metmuseum.org/CRDImages/is/original/DP-19634-001.jpg' },
+      { title: 'V&A · Ottoman ball-and-stripe tile, 1560–90', url: 'https://collections.vam.ac.uk/item/O113294/tile-unknown/' }
+    ],
+    draw(width, height) {
+      const period = width / 2
+      // Deux fuseaux effilés partagent leurs pointes, de part et d'autre d'une diagonale.
+      const separator = (centre: number, direction: number) => {
+        const topX = centre - direction * period * 0.13
+        const bottomX = centre + direction * period * 0.13
+        const firstX = topX + (bottomX - topX) / 3
+        const secondX = topX + (bottomX - topX) * 2 / 3
+        const firstY = height * (0.06 + 0.88 / 3)
+        const secondY = height * (0.06 + 0.88 * 2 / 3)
+        return [-1, 1].map(side =>
+          `<path d="M ${n(topX)} ${n(height * 0.06)} C ${n(firstX + side * height * 0.23)} ${n(firstY)} ${n(secondX + side * height * 0.23)} ${n(secondY)} ${n(bottomX)} ${n(height * 0.94)} C ${n(secondX + side * height * 0.055)} ${n(secondY)} ${n(firstX + side * height * 0.055)} ${n(firstY)} ${n(topX)} ${n(height * 0.06)} Z" fill="var(--ink-a)"/>`).join('')
+      }
+      return around(width, 2, 0, x =>
+        `<g transform="translate(${n(x)} 0)">`
+        + [[-0.22, 0.28], [0.22, 0.28], [0, 0.7]].map(([cx, cy]) =>
+          `<circle cx="${n(height * cx!)}" cy="${n(height * cy!)}" r="${n(height * 0.14)}" fill="var(--ink-a)"/>`).join('')
+        + [[0, 0.3], [-0.22, 0.72], [0.22, 0.72]].map(([cx, cy]) =>
+          `<circle cx="${n(period / 2 + height * cx!)}" cy="${n(height * cy!)}" r="${n(height * 0.14)}" fill="var(--ink-a)"/>`).join('')
+        + separator(period / 4, -1)
+        + separator(period * 0.75, 1)
+        + '</g>')
+    }
+  }
+]
+
 export interface DesignCollection {
   id: string
   label: string
@@ -245,5 +330,6 @@ function decoratedVessel(id: string, colors: DesignCollection['colors'], centerY
 export const designCollections: DesignCollection[] = [
   { id: 'japan', label: 'Japan · Yunomi', vessel: decoratedVessel('yunomi', designColors, 1.12), colors: designColors, colorDescription: 'cream on navy', designs: yunomiDesigns },
   { id: 'china', label: 'China · Gaiwan', vessel: decoratedVessel('gaiwan', gaiwanColors, 1), colors: gaiwanColors, colorDescription: 'blue on ivory', designs: gaiwanDesigns },
-  { id: 'colombia', label: 'Colombia · Clay mug', vessel: decoratedVessel('colombian-mug', colombianColors, 1.16), colors: colombianColors, colorDescription: 'cream on terracotta', designs: colombianDesigns }
+  { id: 'colombia', label: 'Colombia · Clay mug', vessel: decoratedVessel('colombian-mug', colombianColors, 1.16), colors: colombianColors, colorDescription: 'cream on terracotta', designs: colombianDesigns },
+  { id: 'turkiye', label: 'Türkiye · Çay glass', vessel: decoratedVessel('cay-glass', cayColors, 1.22), colors: cayColors, colorDescription: 'cream on turquoise with a gold rim', designs: cayDesigns }
 ]
