@@ -31,6 +31,14 @@ export interface LidDefinition {
 export interface VesselDefinition {
   id: string
   name: string
+  heritage?: {
+    origin: string
+    note: string
+    sources: {
+      title: string
+      url: string
+    }[]
+  }
   colors: Record<string, string>
   parts: RevolvedPart[]
   lid?: LidDefinition

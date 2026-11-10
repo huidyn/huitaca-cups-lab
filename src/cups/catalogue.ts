@@ -13,6 +13,10 @@ function point3(point: number[] | undefined): Point3 {
 
 export const vessels: VesselDefinition[] = definitions.map(definition => ({
   ...definition,
+  colors: Object.fromEntries(Object.entries(definition.colors).map(([id, color]) => {
+    if (typeof color !== 'string') throw new Error(`Invalid colour slot: ${id}`)
+    return [id, color] as const
+  })),
   parts: definition.parts.map(part => {
     if (part.material !== 'flat') throw new Error(`Unknown material: ${part.material}`)
     return { ...part, material: 'flat', outline: part.outline.map(point2) }

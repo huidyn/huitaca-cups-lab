@@ -4,10 +4,11 @@ import { vessels } from './catalogue'
 import { createCup, createHandleGeometry, radiusAtY } from './geometry'
 
 describe('reference cups', () => {
-  it('keeps the first two reference rows in order', () => {
+  it('keeps all three reference rows in order', () => {
     expect(vessels.map(v => v.id)).toEqual([
       'mug', 'tall-mug', 'teacup', 'tumbler', 'takeaway', 'small-cup',
-      'footed-bowl', 'round-bowl', 'rimmed-cup', 'rounded-tumbler', 'goblet', 'round-mug'
+      'footed-bowl', 'round-bowl', 'rimmed-cup', 'rounded-tumbler', 'goblet', 'round-mug',
+      'colombian-mug', 'gaiwan', 'yunomi', 'kulhad', 'cay-glass', 'podstakannik'
     ])
   })
 
@@ -75,7 +76,34 @@ describe('reference cups', () => {
     }
   })
 
-  it.each(vessels.slice(6))('leaves the second-row opening clear into the interior: $id', vessel => {
+  it('keeps the teacup separation border unlit and visible above the saucer', () => {
+    const vessel = vessels.find(v => v.id === 'teacup')!
+    const border = vessel.parts.find(part => part.id === 'base-border')!
+    const cup = createCup(vessel)
+    try {
+      const mesh = cup.root.getObjectByName(border.id) as Mesh
+      const material = mesh.material as MeshBasicMaterial
+      expect(material).toBeInstanceOf(MeshBasicMaterial)
+      expect(material.color.getHexString()).toBe(vessel.colors[border.color]!.slice(1))
+      expect(material.transparent).toBe(false)
+      expect(mesh.castShadow).toBe(false)
+      for (const elevation of [0, 16, 32]) {
+        const angle = elevation * Math.PI / 180
+        const direction = new Vector3(0, Math.sin(angle), Math.cos(angle))
+        for (const yaw of [-0.44, 0, 0.44]) {
+          cup.root.rotation.y = yaw
+          cup.root.updateMatrixWorld(true)
+          const target = cup.root.localToWorld(new Vector3(0, 0.185, radiusAtY(border.outline, 0.185)))
+          const ray = new Raycaster(target.clone().addScaledVector(direction, 10), direction.clone().negate())
+          expect(ray.intersectObject(cup.root, true)[0]?.object.name).toBe('base-border')
+        }
+      }
+    } finally {
+      cup.dispose()
+    }
+  })
+
+  it.each(vessels.slice(6).filter(v => !v.parts.some(part => part.id === 'lid')))('leaves each new open vessel clear into the interior: $id', vessel => {
     const cup = createCup(vessel)
     try {
       cup.root.updateMatrixWorld(true)
@@ -88,6 +116,58 @@ describe('reference cups', () => {
     } finally {
       cup.dispose()
     }
+  })
+
+  it('records source links and cultural qualifications for exactly the last six', () => {
+    expect(vessels.slice(0, 12).every(v => !v.heritage)).toBe(true)
+    for (const vessel of vessels.slice(12)) {
+      expect(vessel.heritage?.origin).toBeTruthy()
+      expect(vessel.heritage?.note).toBeTruthy()
+      expect(vessel.heritage!.sources.length).toBeGreaterThan(0)
+      for (const source of vessel.heritage!.sources) {
+        expect(source.title).toBeTruthy()
+        expect(new URL(source.url).protocol).toBe('https:')
+      }
+    }
+  })
+
+  it('builds the gaiwan as a handleless bowl, saucer and closed lid with a knob', () => {
+    const vessel = vessels.find(v => v.id === 'gaiwan')!
+    expect(vessel.handle).toBeNull()
+    expect(vessel.parts.map(part => part.id)).toEqual(expect.arrayContaining(['body', 'saucer', 'lid', 'lid-knob']))
+    const cup = createCup(vessel)
+    try {
+      cup.root.updateMatrixWorld(true)
+      const ray = new Raycaster(new Vector3(0.45, 4, 0), new Vector3(0, -1, 0))
+      expect(ray.intersectObject(cup.root, true)[0]?.object.name).toBe('lid')
+    } finally {
+      cup.dispose()
+    }
+  })
+
+  it('keeps the yunomi foot, kulhad taper and waisted tea-glass profile distinct', () => {
+    const yunomi = vessels.find(v => v.id === 'yunomi')!
+    const kulhad = vessels.find(v => v.id === 'kulhad')!
+    const glass = vessels.find(v => v.id === 'cay-glass')!
+    for (const vessel of [yunomi, kulhad, glass]) expect(vessel.handle).toBeNull()
+    expect(yunomi.parts.some(part => part.id === 'foot')).toBe(true)
+    const clay = kulhad.parts.find(part => part.id === 'body')!.outline
+    expect(radiusAtY(clay, 1.6)).toBeGreaterThan(radiusAtY(clay, 0.2))
+    const waist = glass.parts.find(part => part.id === 'body')!.outline
+    expect(radiusAtY(waist, 1.2)).toBeLessThan(radiusAtY(waist, 0.5))
+    expect(radiusAtY(waist, 1.2)).toBeLessThan(radiusAtY(waist, 1.85))
+    expect(glass.parts.some(part => part.id === 'saucer')).toBe(true)
+  })
+
+  it('surrounds the lower glass with a separate handled holder and keeps its eyes above it', () => {
+    const vessel = vessels.find(v => v.id === 'podstakannik')!
+    const holder = vessel.parts.find(part => part.id === 'holder')!
+    const glass = vessel.parts.find(part => part.id === 'body')!
+    const top = Math.max(...holder.outline.map(point => point[1]))
+    expect(vessel.handle).not.toBeNull()
+    expect(radiusAtY(holder.outline, 0.7)).toBeGreaterThan(radiusAtY(glass.outline, 0.7))
+    expect(Math.max(...vessel.handle!.points.map(point => point[1]))).toBeLessThan(top)
+    expect(vessel.face.centerY - vessel.face.height / 2).toBeGreaterThan(top)
   })
 
   it.each(vessels.filter(v => v.handle))('buries both handle ends inside the outer wall: $id', vessel => {

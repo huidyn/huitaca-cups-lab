@@ -11,6 +11,8 @@ const elevation = ref(16)
 const fallback = ref(false)
 const reduced = ref(false)
 const ready = ref(false)
+const culturalVessels = vessels.filter(vessel => vessel.heritage)
+const culturalStart = vessels.findIndex(vessel => vessel.heritage)
 let gallery: ReturnType<typeof createCupGallery> | undefined
 let disposed = false
 let media: MediaQueryList
@@ -75,18 +77,45 @@ onUnmounted(() => {
       <div class="study-heading">
         <p class="eyebrow">STUDY 01 / FORM</p>
         <h1 id="study-title">A little character.</h1>
-        <p class="study-description">Twelve shapes. Two eyes. Nothing extra.</p>
+        <p class="study-description">Eighteen shapes. Two eyes. Nothing extra.</p>
       </div>
 
       <div ref="stage" class="cup-stage" :data-ready="ready">
         <canvas ref="canvas" class="cup-canvas" :class="{ 'is-hidden': fallback || reduced }" aria-hidden="true" />
-        <figure v-for="(vessel, i) in vessels" :key="vessel.id" class="cup-item">
-          <div class="cup-viewport" role="img" :aria-label="`${vessel.name}, grey with white eyes${vessel.id === 'takeaway' ? ' and a lid' : ' and a dark interior'}`">
-            <img v-if="fallback || reduced" :src="`/cups/stills/${vessel.id}.png`" alt="" width="512" height="512" />
+        <template v-for="(vessel, i) in vessels" :key="vessel.id">
+          <div v-if="i === culturalStart" class="cup-divider">
+            <p class="eyebrow">STUDY 02 / CULTURAL FORMS</p>
+            <h2>Cultural forms.</h2>
+            <p>Specific references. Many local variations.</p>
           </div>
-          <figcaption><span class="cup-number">{{ String(i + 1).padStart(2, '0') }}</span>{{ vessel.name }}</figcaption>
-        </figure>
+          <figure class="cup-item">
+            <div class="cup-viewport" role="img" :aria-label="`${vessel.name}, grey with white eyes${vessel.lid || vessel.parts.some(part => part.id === 'lid') ? ' and a lid' : ' and a dark interior'}`">
+              <img v-if="fallback || reduced" :src="`/cups/stills/${vessel.id}.png`" alt="" width="512" height="512" />
+            </div>
+            <figcaption>
+              <span class="cup-number">{{ String(i + 1).padStart(2, '0') }}</span>{{ vessel.name }}
+              <span v-if="vessel.heritage" class="cup-origin">{{ vessel.heritage.origin }}</span>
+            </figcaption>
+          </figure>
+        </template>
       </div>
+
+      <details class="culture-sources">
+        <summary>Form notes &amp; sources</summary>
+        <dl>
+          <template v-for="vessel in culturalVessels" :key="vessel.id">
+            <dt>{{ vessel.name }} · {{ vessel.heritage!.origin }}</dt>
+            <dd>
+              <p>{{ vessel.heritage!.note }}</p>
+              <ul>
+                <li v-for="source in vessel.heritage!.sources" :key="source.url">
+                  <a :href="source.url" target="_blank" rel="noreferrer">{{ source.title }} ↗</a>
+                </li>
+              </ul>
+            </dd>
+          </template>
+        </dl>
+      </details>
 
       <div class="study-controls">
         <p class="interaction-hint">{{ reduced ? 'Reduced motion · static previews' : fallback ? 'Static previews · WebGL unavailable' : 'Move your cursor. They’re curious.' }}</p>

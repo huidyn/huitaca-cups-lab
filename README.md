@@ -3,8 +3,10 @@
 ## Huitaca Cups lab
 
 This fork adds a separate 3D shape study at **http://localhost:5190/cups**.
-The original bloub screen stays at `/`. The form study recreates the first two
-rows of the reference, twelve plain grey, generated vessels with darker interiors.
+The original bloub screen stays at `/`. The form study contains eighteen plain
+grey, generated vessels with darker interiors. A divider separates the final six
+cultural forms; their notes and online sources are available on the lab screen
+and in [the research notes](docs/cultural-vessels.md).
 Move the pointer to aim their eyes, adjust the view angle, or enable slow turning.
 
 Vessel data lives in `src/cups/vessels.json`; the Three.js geometry and renderer

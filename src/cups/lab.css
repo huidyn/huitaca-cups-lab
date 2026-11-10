@@ -33,6 +33,19 @@ a { color: inherit; }
 .cup-viewport img { display: block; width: 100%; height: 100%; object-fit: contain; }
 .cup-item figcaption { text-align: center; font-size: 12px; color: #666a62; margin-top: 20px; }
 .cup-number { font-size: 9px; color: #92958e; margin-right: 10px; font-variant-numeric: tabular-nums; }
+.cup-origin { display: block; margin-top: 7px; color: #8b8f85; font-size: 10px; }
+.cup-divider { grid-column: 1 / -1; border-top: 1px solid #d9dcd3; margin-top: 12px; padding-top: 30px; }
+.cup-divider .eyebrow { margin-bottom: 12px; }
+.cup-divider h2 { font-size: 25px; font-weight: 450; letter-spacing: -0.7px; margin: 0 0 10px; }
+.cup-divider > p:last-child { color: #777b73; font-size: 12px; margin: 0; }
+.culture-sources { color: #777b73; font-size: 12px; margin-top: 36px; }
+.culture-sources summary { cursor: pointer; width: fit-content; }
+.culture-sources dl { max-width: 780px; margin: 24px 0 0; line-height: 1.6; }
+.culture-sources dt { color: #51564c; font-weight: 600; margin-top: 22px; }
+.culture-sources dd { margin: 0; }
+.culture-sources p { margin: 7px 0; }
+.culture-sources ul { list-style: none; margin: 0; padding: 0; }
+.culture-sources a { text-underline-offset: 3px; overflow-wrap: anywhere; }
 .study-controls { display: flex; justify-content: space-between; align-items: center; gap: 24px; margin-top: 55px; padding-top: 22px; border-top: 1px solid #e4e4de; }
 .interaction-hint { color: #777b73; font-size: 12px; margin: 0; }
 .controls { display: flex; align-items: center; gap: 28px; }

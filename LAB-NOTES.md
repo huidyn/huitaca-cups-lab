@@ -1,10 +1,50 @@
 # Huitaca Cups lab
 
-## Current pass: two rows, twelve shapes
+## Current pass: eighteen shapes, with a separate cultural group
 
 Preview: <http://localhost:5190/cups>. Original bloub: <http://localhost:5190/>.
 First six approved and committed locally at `ed76d29`. No pushes.
-The next six are also approved for a local commit. The broader lab brief remains open.
+The second six were committed at `1519ccc`. The thicker teacup border and final
+cultural group are visually approved and included in this checkpoint. All
+eighteen grey forms are approved. The broader lab brief remains open.
+
+### Cultural group, visually approved
+
+- After all twelve existing cups, as confirmed by Alessandro, a full-width divider
+  introduces the final six in the original order: Colombian clay mug, gaiwan,
+  yunomi, kulhad, çay glass and glass with podstakannik.
+- Used the newer supplied Colombian mug's straighter outline. Kept all six grey,
+  unlit and free of the coloured reference sheets' motifs. These are stylised
+  outlines, not measured historical replicas or universal national types.
+- Checked online sources before implementation. Source links, cultural context
+  and explicit limits are stored in each vessel's `heritage` data and exposed
+  by the lab's “Form notes & sources” disclosure.
+- [Research notes](docs/cultural-vessels.md) explain what each source supports:
+  Ráquira craft context does not authenticate the supplied Colombian mug or its
+  motifs; the gaiwan gets a separate saucer and knobbed lid; the broad “Islamic
+  glass” label is replaced with a specific regional çay-glass study; the Russian
+  handle belongs to a lower holder, around a separate open drinking glass.
+- Glass and metal are still opaque grey placeholders. Material comparisons,
+  patterns and claims about particular historic decorative traditions remain
+  outside this pass. No new renderer or geometry algorithm was needed.
+- Added DOM coverage for the divider after twelve cards, eighteen shared-canvas
+  viewports, source links, correct gaiwan description and all eighteen fallbacks
+  on initial and runtime reduced-motion changes.
+- Strict TypeScript, production build and 81 focused cup checks pass. Live pane:
+  eighteen cards, twelve before the divider and six after it, nine source links,
+  one rendered canvas and no horizontal overflow in its narrow layout.
+  Generated all six cultural fallback PNGs with the actual renderer.
+- The first-row performance table below is historical; it is not a measurement
+  of the eighteen-vessel gallery.
+
+### Teacup separation, visually approved
+
+- Added a thin darker border around the teacup's base, above the saucer.
+  It is an opaque revolved band in the JSON (`base-border`, colour slot `border`),
+  using the same unlit material as everything else. No shadow, lighting,
+  gradient, or camera-facing overlay. The cup and saucer profiles are unchanged.
+  Alessandro approved a thicker version: the band now reaches Y=0.24 instead of
+  Y=0.20, continuing along the same lower wall. Its fallback was refreshed.
 
 ### Second row, visually approved
 
