@@ -1,0 +1,125 @@
+// @vitest-environment happy-dom
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { vessels } from './catalogue'
+import { createCupGallery } from './renderer'
+
+vi.mock('three', async importOriginal => {
+  const original = await importOriginal<typeof import('three')>()
+  return {
+    ...original,
+    WebGLRenderer: class {
+      ratio = 1
+      canvas: HTMLCanvasElement
+      constructor({ canvas }: { canvas: HTMLCanvasElement }) { this.canvas = canvas }
+      setClearColor() {}
+      setScissorTest() {}
+      clear() {}
+      setViewport() {}
+      setScissor() {}
+      render() {}
+      dispose() {}
+      getPixelRatio() { return this.ratio }
+      setPixelRatio(value: number) { this.ratio = value }
+      setSize(width: number, height: number) {
+        this.canvas.width = Math.floor(width * this.ratio)
+        this.canvas.height = Math.floor(height * this.ratio)
+      }
+    }
+  }
+})
+
+describe('on-demand cup renderer', () => {
+  let queue: Map<number, FrameRequestCallback>
+  let nextId: number
+  let time: number
+  let canvas: HTMLCanvasElement
+  let gallery: ReturnType<typeof createCupGallery>
+  let media: EventTarget & { matches: boolean }
+  let hidden: boolean
+
+  function step() {
+    time += 16
+    const callbacks = [...queue.values()]
+    queue.clear()
+    callbacks.forEach(callback => callback(time))
+  }
+
+  beforeEach(() => {
+    queue = new Map()
+    nextId = 0
+    time = 0
+    hidden = false
+    vi.spyOn(document, 'hidden', 'get').mockImplementation(() => hidden)
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      queue.set(++nextId, callback)
+      return nextId
+    })
+    vi.stubGlobal('cancelAnimationFrame', (id: number) => queue.delete(id))
+    vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} })
+    media = Object.assign(new EventTarget(), { matches: false })
+    vi.stubGlobal('matchMedia', () => media)
+    vi.stubGlobal('devicePixelRatio', 3)
+    canvas = document.createElement('canvas')
+    vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 300, 300))
+    gallery = createCupGallery(canvas, [{ element: canvas, vessel: vessels[0]! }])
+  })
+
+  afterEach(() => {
+    gallery.dispose()
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+  })
+
+  it('draws once at rest, caps density at 2x, and leaves no idle callback', () => {
+    step()
+    expect(canvas.width).toBe(600)
+    expect(canvas.dataset.frames).toBe('1')
+    expect(queue.size).toBe(0)
+  })
+
+  it('settles after mouse following, and identical pointer targets do not wake it', () => {
+    step()
+    const event = () => new PointerEvent('pointermove', { clientX: 600, clientY: 90, pointerType: 'mouse' })
+    window.dispatchEvent(event())
+    for (let i = 0; i < 100; i++) step()
+    expect(Number(canvas.dataset.frames)).toBeGreaterThan(1)
+    expect(queue.size).toBe(0)
+    window.dispatchEvent(event())
+    expect(queue.size).toBe(0)
+  })
+
+  it('cancels continuous turning while hidden and resumes on return', () => {
+    gallery.setTurning(true)
+    step()
+    expect(queue.size).toBe(1)
+    hidden = true
+    document.dispatchEvent(new Event('visibilitychange'))
+    expect(queue.size).toBe(0)
+    const frames = canvas.dataset.frames
+    step()
+    expect(canvas.dataset.frames).toBe(frames)
+    hidden = false
+    document.dispatchEvent(new Event('visibilitychange'))
+    expect(queue.size).toBe(1)
+    step()
+    expect(queue.size).toBe(1)
+  })
+
+  it('stops motion when the preference changes at runtime', () => {
+    gallery.setTurning(true)
+    step()
+    media.matches = true
+    media.dispatchEvent(new Event('change'))
+    step()
+    expect(queue.size).toBe(0)
+    window.dispatchEvent(new PointerEvent('pointermove', { clientX: 600 }))
+    expect(queue.size).toBe(0)
+  })
+
+  it('cancels scheduled work on disposal', () => {
+    gallery.setTurning(true)
+    step()
+    gallery.dispose()
+    expect(queue.size).toBe(0)
+  })
+})

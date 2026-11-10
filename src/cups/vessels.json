@@ -1,0 +1,92 @@
+[
+  {
+    "id": "mug",
+    "name": "Mug",
+    "colors": { "body": "#959693", "inside": "#626460", "rim": "#a3a49f", "eyes": "#fffef9" },
+    "parts": [
+      { "id": "body", "material": "flat", "color": "body", "outline": [[0,0],[0.66,0],[0.74,0.025],[0.78,0.07],[0.79,0.16],[0.79,1.75],[0.78,1.82]] },
+      { "id": "rim", "material": "flat", "color": "rim", "outline": [[0.78,1.82],[0.77,1.845],[0.72,1.845],[0.70,1.82]] },
+      { "id": "inside", "material": "flat", "color": "inside", "outline": [[0.70,1.82],[0.70,0.22],[0.65,0.16],[0,0.16]] }
+    ],
+    "handle": { "color": "body", "radius": 0.105, "flare": { "length": 0.24, "scale": 1.3 }, "points": [[0.73,1.47,0],[1.10,1.50,0],[1.32,1.25,0],[1.34,0.93,0],[1.19,0.61,0],[0.69,0.46,0]] },
+    "face": { "surface": "body", "centerY": 1.04, "width": 0.98, "height": 0.72, "eyeWidth": 0.17, "eyeHeight": 0.37, "separation": 0.39, "color": "eyes" },
+    "anchors": { "top": [0,1.845,0], "handle": [1.34,0.93,0] }
+  },
+  {
+    "id": "tall-mug",
+    "name": "Tall mug",
+    "colors": { "body": "#959693", "inside": "#626460", "rim": "#a3a49f", "eyes": "#fffef9" },
+    "parts": [
+      { "id": "body", "material": "flat", "color": "body", "outline": [[0,0],[0.59,0],[0.67,0.025],[0.69,0.08],[0.70,2.12],[0.70,2.20]] },
+      { "id": "rim", "material": "flat", "color": "rim", "outline": [[0.70,2.20],[0.69,2.225],[0.63,2.225],[0.62,2.20]] },
+      { "id": "inside", "material": "flat", "color": "inside", "outline": [[0.62,2.20],[0.61,0.20],[0.55,0.15],[0,0.15]] }
+    ],
+    "handle": { "color": "body", "radius": 0.105, "flare": { "length": 0.24, "scale": 1.3 }, "points": [[0.65,1.78,0],[1.02,1.81,0],[1.23,1.55,0],[1.25,1.18,0],[1.07,0.80,0],[0.58,0.66,0]] },
+    "face": { "surface": "body", "centerY": 1.20, "width": 0.96, "height": 0.76, "eyeWidth": 0.17, "eyeHeight": 0.37, "separation": 0.39, "color": "eyes" },
+    "anchors": { "top": [0,2.225,0], "handle": [1.25,1.18,0] }
+  },
+  {
+    "id": "teacup",
+    "name": "Teacup",
+    "colors": { "body": "#959693", "inside": "#626460", "rim": "#a3a49f", "eyes": "#fffef9" },
+    "parts": [
+      { "id": "body", "material": "flat", "color": "body", "outline": [[0,0.12],[0.39,0.12],[0.49,0.17],[0.61,0.28],[0.74,0.46],[0.84,0.68],[0.91,0.93],[0.94,1.18],[0.94,1.37]] },
+      { "id": "rim", "material": "flat", "color": "rim", "outline": [[0.94,1.37],[0.93,1.395],[0.87,1.395],[0.86,1.37]] },
+      { "id": "inside", "material": "flat", "color": "inside", "outline": [[0.86,1.37],[0.86,1.18],[0.83,0.95],[0.77,0.72],[0.67,0.52],[0.55,0.37],[0.39,0.28],[0,0.28]] },
+      { "id": "saucer", "material": "flat", "color": "body", "outline": [[0,0],[0.72,0],[0.95,0.035],[1.12,0.09],[1.17,0.15],[1.16,0.18],[1.04,0.15],[0.76,0.10],[0,0.10]] }
+    ],
+    "handle": { "color": "body", "radius": 0.085, "flare": { "length": 0.24, "scale": 1.3 }, "points": [[0.89,1.15,0],[1.16,1.18,0],[1.29,1.04,0],[1.25,0.79,0],[1.06,0.59,0],[0.62,0.49,0]] },
+    "face": { "surface": "body", "centerY": 0.81, "width": 1.0, "height": 0.66, "eyeWidth": 0.17, "eyeHeight": 0.35, "separation": 0.39, "color": "eyes" },
+    "anchors": { "top": [0,1.395,0], "handle": [1.29,1.04,0] }
+  },
+  {
+    "id": "tumbler",
+    "name": "Tumbler",
+    "colors": { "body": "#959693", "inside": "#626460", "rim": "#a3a49f", "eyes": "#fffef9" },
+    "parts": [
+      { "id": "body", "material": "flat", "color": "body", "outline": [[0,0],[0.53,0],[0.61,0.025],[0.63,0.08],[0.78,1.88],[0.78,1.96]] },
+      { "id": "rim", "material": "flat", "color": "rim", "outline": [[0.78,1.96],[0.77,1.98],[0.71,1.98],[0.70,1.96]] },
+      { "id": "inside", "material": "flat", "color": "inside", "outline": [[0.70,1.96],[0.55,0.19],[0.50,0.14],[0,0.14]] }
+    ],
+    "handle": null,
+    "face": { "surface": "body", "centerY": 1.10, "width": 0.96, "height": 0.74, "eyeWidth": 0.17, "eyeHeight": 0.37, "separation": 0.39, "color": "eyes" },
+    "anchors": { "top": [0,1.98,0] }
+  },
+  {
+    "id": "takeaway",
+    "name": "Takeaway",
+    "colors": { "body": "#959693", "inside": "#626460", "rim": "#a3a49f", "eyes": "#fffef9" },
+    "parts": [
+      { "id": "body", "material": "flat", "color": "body", "outline": [[0,0],[0.48,0],[0.54,0.025],[0.56,0.08],[0.78,1.78],[0.78,1.83]] },
+      { "id": "lid-edge", "material": "flat", "color": "inside", "outline": [[0.77,1.78],[0.80,1.78],[0.81,1.83],[0.78,1.85]] },
+      { "id": "lid", "material": "flat", "color": "body", "outline": [[0.78,1.83],[0.85,1.83],[0.88,1.87],[0.88,1.99],[0.85,2.03],[0.74,2.03]] },
+      { "id": "inside", "material": "flat", "color": "inside", "outline": [[0.70,1.83],[0.48,0.19],[0.44,0.14],[0,0.14]] }
+    ],
+    "lid": {
+      "radius": 0.74,
+      "baseY": 2.03,
+      "height": 0.08,
+      "rise": 0.16,
+      "raise": { "margin": 0.04, "falloff": 0.08 },
+      "color": "body",
+      "insideColor": "inside",
+      "opening": { "center": [0.40,0], "angle": 90, "width": 0.44, "depth": 0.26, "wallDepth": 0.12 }
+    },
+    "handle": null,
+    "face": { "surface": "body", "centerY": 0.99, "width": 0.92, "height": 0.72, "eyeWidth": 0.17, "eyeHeight": 0.37, "separation": 0.39, "color": "eyes" },
+    "anchors": { "top": [0.40,2.27,0], "steam": [0.40,2.27,0] }
+  },
+  {
+    "id": "small-cup",
+    "name": "Small cup",
+    "colors": { "body": "#959693", "inside": "#626460", "rim": "#a3a49f", "eyes": "#fffef9" },
+    "parts": [
+      { "id": "body", "material": "flat", "color": "body", "outline": [[0,0],[0.46,0],[0.52,0.025],[0.56,0.10],[0.79,0.91],[0.84,1.21],[0.84,1.38]] },
+      { "id": "rim", "material": "flat", "color": "rim", "outline": [[0.84,1.38],[0.83,1.405],[0.77,1.405],[0.76,1.38]] },
+      { "id": "inside", "material": "flat", "color": "inside", "outline": [[0.76,1.38],[0.76,1.22],[0.71,0.94],[0.49,0.23],[0.44,0.16],[0,0.16]] }
+    ],
+    "handle": { "color": "body", "radius": 0.09, "flare": { "length": 0.24, "scale": 1.3 }, "points": [[0.76,1.14,0],[1.08,1.16,0],[1.21,1.0,0],[1.17,0.76,0],[0.98,0.54,0],[0.55,0.43,0]] },
+    "face": { "surface": "body", "centerY": 0.78, "width": 0.94, "height": 0.65, "eyeWidth": 0.17, "eyeHeight": 0.35, "separation": 0.39, "color": "eyes" },
+    "anchors": { "top": [0,1.405,0], "handle": [1.21,1.0,0] }
+  }
+]

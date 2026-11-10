@@ -1,5 +1,18 @@
 # bloub
 
+## Huitaca Cups lab
+
+This fork adds a separate 3D shape study at **http://localhost:5190/cups**.
+The original bloub screen stays at `/`. The first study recreates the six
+top-row cups as plain grey, generated vessels with darker interiors.
+Move the pointer to aim their eyes, adjust the view angle, or enable slow turning.
+
+Vessel data lives in `src/cups/vessels.json`; the Three.js geometry and renderer
+are framework-free TypeScript and load only on the new screen.
+See [LAB-NOTES.md](LAB-NOTES.md) for the current scope, checks, and open decisions.
+
+## Original project
+
 An SVG recreation of the x.ai bot avatar: **one filled black shape** that morphs
 between 14 states, **two white shapes** for the eyes that morph independently, on
 a plain background. No animation library.
