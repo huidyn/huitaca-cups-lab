@@ -8,6 +8,7 @@ import { createLidGeometry } from './lid'
 import { type AccessoryId, createPaintbrush, fitBrush, GAIWAN_LID_PARTS } from './accessories'
 import { createBeret, fitBeret } from './beret'
 import { addEdgeTones } from './edge-tones'
+import { createTeaTag, fitTeaTag } from './tea-tag'
 import { bandLayout } from './pattern'
 
 export function radiusAtY(outline: Point2[], y: number): number {
@@ -154,6 +155,13 @@ export function createCup(definition: VesselDefinition, options: { pattern?: boo
   }
 
   const extraMaterials: MeshBasicMaterial[] = []
+  if (options.accessory === 'tea-bag') {
+    const fit = fitTeaTag(definition)
+    const tea = createTeaTag(fit)
+    extraMaterials.push(...tea.materials)
+    root.add(tea.group)
+    for (const part of root.children.filter(child => fit.lidParts.includes(child.name))) part.position.y += fit.lidLift
+  }
   if (options.accessory === 'beret') {
     const beret = createBeret(fitBeret(definition))
     extraMaterials.push(...beret.materials)

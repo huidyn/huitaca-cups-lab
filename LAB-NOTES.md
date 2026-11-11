@@ -1,5 +1,50 @@
 # Huitaca Cups lab
 
+## Tea tag: frozen hanging and contact fit
+
+- The existing Tea bag choice now reads Tea tag. It adds the reference's
+  plain yellow paper (`#e2b245`) and cream string (`#e3dbd1`) on the left.
+  The paper was initially 0.26 by 0.30 units; Alessandro requested a 30%
+  enlargement to 0.338 by 0.39. It scales around its string attachment,
+  keeping paper thickness and the complete string unchanged. A pre-change
+  geometry snapshot checks the strings on all eighteen cups.
+  The round string retains its 0.016-unit radius.
+- Alessandro corrected the first pose: a viewer-facing paper and generous
+  standoff looked unnatural from an angle. The replacement uses the actual
+  cup outline to derive a taut string path. It falls vertically where free,
+  touches an outward bulge and bridges inward hollows instead of following
+  them. The paper shares the attachment's azimuth rather than facing the
+  initial camera.
+- Paper on a narrowing cup hangs vertically below the string. Where the wall
+  widens into its path, the paper tilts outward just enough to rest against
+  the wall, with a 0.002-unit clearance. The paper stays connected at its top.
+  Tests reproduce both cases using the existing cups and rendered walls.
+- Under a lid, the string flattens to 0.006 units vertically while retaining
+  its width. The cover lifts 0.028 units on the takeaway and 0.038 on the
+  gaiwan, accounting for existing profile overlap and leaving a 0.008-unit
+  seam above the seat. Both lifts are under 2% of the original vessel height.
+  Other parts and the catalogue stay unchanged.
+- Takeaway correction: the hanging string releases from the retaining rim
+  under the plastic overhang, not from the cover's widest edge. Its release
+  radius is 0.828 rather than 0.915 units. The lid gap, paper height and
+  every other cup's fitting rules are unchanged.
+- All fitting happens once at model construction and is cached by vessel.
+  Turning or changing elevation does not update the string or paper pose;
+  there is no running physics simulation, gravity animation or billboarding.
+- Tests cover all eighteen cups: left-side placement across the full gaze
+  range, no visible eye-centre occlusion from frontal and front-quarter views,
+  cord and paper clearance, lid compression, paper attachment, framing,
+  disposal and frozen transforms. Additional tests distinguish vertical
+  hanging from actual wall-supported paper.
+- The existing accessory controls retain cup, selection, turn and elevation.
+  Reduced motion keeps manual inspection. WebGL failure still displays and
+  labels the bare grey cup; no accessory PNGs are implied or generated.
+- Alessandro approved the final enlarged tag and requested this commit.
+  No browser preview or screenshots were taken.
+- Validation: all 704 tests across 24 files, strict TypeScript, production
+  build and `git diff --check` pass. Vite retains the existing renderer
+  chunk-size warning.
+
 ## Beret reference-shape correction
 
 - Alessandro supplied the original accessory reference again and requested

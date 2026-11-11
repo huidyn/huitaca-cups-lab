@@ -5,6 +5,7 @@ import { vessels } from './catalogue'
 import { createCupGallery } from './renderer'
 import * as accessories from './accessories'
 import * as berets from './beret'
+import * as teaTags from './tea-tag'
 
 vi.mock('three', async importOriginal => {
   const original = await importOriginal<typeof import('three')>()
@@ -189,9 +190,10 @@ describe('on-demand cup renderer', () => {
     expect(queue.size).toBe(0)
   })
 
-  it.each(['paintbrush', 'beret'] as const)('fits the %s only at construction, never while turning or changing elevation', accessory => {
+  it.each(['paintbrush', 'beret', 'tea-bag'] as const)('fits the %s only at construction, never while turning or changing elevation', accessory => {
     gallery.dispose()
-    const fit = accessory === 'paintbrush' ? vi.spyOn(accessories, 'fitBrush') : vi.spyOn(berets, 'fitBeret')
+    const fit = accessory === 'paintbrush' ? vi.spyOn(accessories, 'fitBrush')
+      : accessory === 'beret' ? vi.spyOn(berets, 'fitBeret') : vi.spyOn(teaTags, 'fitTeaTag')
     const render = vi.spyOn(WebGLRenderer.prototype, 'render')
     const vessel = vessels.find(vessel => vessel.id === 'gaiwan')!
     const original = JSON.stringify(vessel)
@@ -203,14 +205,17 @@ describe('on-demand cup renderer', () => {
     const root = render.mock.calls.at(-1)![0].children[0]!
     const model = root.getObjectByName(accessory)!
     const lid = root.getObjectByName('lid')!
-    const pose = [model.position.toArray(), model.rotation.toArray(), lid.position.toArray(), lid.rotation.toArray()]
+    const objects = [model, ...model.children, lid]
+    const pose = () => objects.map(object => [object.position.toArray(), object.rotation.toArray(), object.scale.toArray()])
+    const originalPose = pose()
     for (let i = 0; i < 24; i++) {
       canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }))
       gallery.setElevation(-20 + i * 80 / 23)
       step()
+      expect(pose()).toEqual(originalPose)
     }
     expect(fit).toHaveBeenCalledTimes(1)
-    expect([model.position.toArray(), model.rotation.toArray(), lid.position.toArray(), lid.rotation.toArray()]).toEqual(pose)
+    expect(pose()).toEqual(originalPose)
     expect(JSON.stringify(vessel)).toBe(original)
     expect(queue.size).toBe(0)
   })
