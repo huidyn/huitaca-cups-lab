@@ -5,6 +5,7 @@ import {
 } from 'three'
 import type { Point2, VesselDefinition } from './types'
 import { createLidGeometry } from './lid'
+import { type AccessoryId, createPaintbrush, fitBrush, GAIWAN_LID_PARTS } from './accessories'
 import { bandLayout } from './pattern'
 
 export function radiusAtY(outline: Point2[], y: number): number {
@@ -89,7 +90,7 @@ export function createHandleGeometry(handle: NonNullable<VesselDefinition['handl
   return geometry
 }
 
-export function createCup(definition: VesselDefinition, options: { pattern?: boolean } = {}) {
+export function createCup(definition: VesselDefinition, options: { pattern?: boolean; accessory?: AccessoryId } = {}) {
   const root = new Group()
   const materials = new Map<string, MeshBasicMaterial>()
   const material = (slot: string) => {
@@ -142,6 +143,23 @@ export function createCup(definition: VesselDefinition, options: { pattern?: boo
     const mesh = new Mesh(createHandleGeometry(handle), material(handle.color))
     mesh.name = 'handle'
     root.add(mesh)
+  }
+
+  const extraMaterials: MeshBasicMaterial[] = []
+  if (options.accessory === 'paintbrush') {
+    const fit = fitBrush(definition)
+    const brush = createPaintbrush(fit)
+    extraMaterials.push(...brush.materials)
+    root.add(brush.group)
+    if (fit.lid) {
+      // Rotation autour du bord d'appui du couvercle, pas autour de l'origine de la tasse.
+      const angle = fit.lid.angle * Math.PI / 180
+      const [px, py] = fit.lid.pivot
+      for (const mesh of root.children.filter(child => GAIWAN_LID_PARTS.includes(child.name))) {
+        mesh.rotation.z = angle
+        mesh.position.set(px - (px * Math.cos(angle) - py * Math.sin(angle)), py + fit.lid.lift - (px * Math.sin(angle) + py * Math.cos(angle)), 0)
+      }
+    }
   }
 
   const face = definition.face
@@ -234,6 +252,7 @@ export function createCup(definition: VesselDefinition, options: { pattern?: boo
         if (object instanceof Mesh) object.geometry.dispose()
       })
       materials.forEach(m => m.dispose())
+      extraMaterials.forEach(m => m.dispose())
       ;(patternMaterial?.uniforms.mask!.value as Texture | null)?.dispose()
       patternMaterial?.dispose()
     }

@@ -1,4 +1,6 @@
 // Palette indépendante des formes, calculée hors du rendu par tools/cup-palette.mjs
+import type { VesselDefinition } from './types'
+
 export const palette = [
   {
     id: 'oat',
@@ -133,3 +135,22 @@ export const palette = [
     }
   }
 ] as const
+
+export const takeawayLidColors = {
+  lid: '#c4c6c0',
+  lidEdge: '#b9bbb5',
+  lidInside: '#a4a69f'
+} as const
+
+// Le couvercle standard reste neutre ; le catalogue gris n'est jamais modifié.
+export function paletteVessel(vessel: VesselDefinition, colors: Record<string, string>): VesselDefinition {
+  if (vessel.id !== 'takeaway') return { ...vessel, colors: { ...colors } }
+  return {
+    ...vessel,
+    colors: { ...colors, ...takeawayLidColors },
+    parts: vessel.parts.map(part => ({
+      ...part, color: part.id === 'lid' ? 'lid' : part.id === 'lid-edge' ? 'lidEdge' : part.color
+    })),
+    lid: vessel.lid && { ...vessel.lid, color: 'lid', insideColor: 'lidInside' }
+  }
+}

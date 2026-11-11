@@ -3,21 +3,32 @@ import { createCup } from './geometry'
 import type { CupDesign } from './designs'
 import { bandLayout, designSvg, MASK_INKS, maskWidth, rasterizeSvg } from './pattern'
 import type { VesselDefinition } from './types'
+import type { AccessoryId } from './accessories'
 
 export interface CupView {
   element: HTMLElement
   vessel: VesselDefinition
   design?: CupDesign
+  accessory?: AccessoryId
 }
+
+// Cadrage en unités de tasse : centre vertical et demi-hauteur visible.
+export interface CupFrame {
+  lift: number
+  halfHeight: number
+}
+export const DEFAULT_FRAME: CupFrame = { lift: 1.1, halfHeight: 1.8 }
+// Plus de hauteur au-dessus de la tasse, pour ce qui dépasse du bord.
+export const ACCESSORY_FRAME: CupFrame = { lift: 1.4, halfHeight: 2.05 }
 
 export interface GalleryOptions {
   // Platine : on fait tourner la tasse à la main, elle ne suit plus le curseur.
   turntable?: boolean
+  initialTurn?: number
   onTurn?: (degrees: number) => void
+  frame?: CupFrame
 }
 
-// Hauteur visible du cadrage orthographique (de -1.8 à 1.8).
-const FRAME_HEIGHT = 3.6
 // Petite marge de résolution, avant le plafond GPU ; les mipmaps filtrent les côtés fuyants.
 const MASK_OVERSAMPLING = 1.25
 const DRAG_RADIANS_PER_PIXEL = 0.012
@@ -51,15 +62,16 @@ export function createCupGallery(canvas: HTMLCanvasElement, views: CupView[], op
   const textureLimit = Math.min(2048, renderer.capabilities.maxTextureSize)
   const anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy())
   const turntable = options.turntable ?? false
-  const entries = views.map(({ element, vessel, design }) => {
-    const cup = createCup(vessel, { pattern: Boolean(design && vessel.pattern) })
+  const framing = options.frame ?? DEFAULT_FRAME
+  const entries = views.map(({ element, vessel, design, accessory }) => {
+    const cup = createCup(vessel, { pattern: Boolean(design && vessel.pattern), accessory })
     const scene = new Scene()
     const pivot = cup.root
     // Le pivot est au milieu du corps, et non au pied de la tasse.
-    for (const child of pivot.children) child.position.y -= 1.1
+    for (const child of pivot.children) child.position.y -= framing.lift
     pivot.position.x = vessel.handle ? -0.18 : 0
     scene.add(pivot)
-    const camera = new OrthographicCamera(-1.6, 1.6, 1.8, -1.8, 0.1, 50)
+    const camera = new OrthographicCamera(-1.6, 1.6, framing.halfHeight, -framing.halfHeight, 0.1, 50)
     return { element, vessel, design, maskWidth: 0, cup, scene, camera, x: 0, y: 0, tx: 0, ty: 0 }
   })
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)')
@@ -70,7 +82,7 @@ export function createCupGallery(canvas: HTMLCanvasElement, views: CupView[], op
   let elevation = 16
   let disposed = false
   let frames = 0
-  let yaw = 0
+  let yaw = (options.initialTurn ?? 0) * Math.PI / 180
   let drag: { pointer: number; x: number } | undefined
 
   function updateMask(entry: typeof entries[number], pixelsPerUnit: number) {
@@ -103,7 +115,7 @@ export function createCupGallery(canvas: HTMLCanvasElement, views: CupView[], op
       const box = entry.element.getBoundingClientRect()
       if (!box.width || !box.height) continue
       const { camera } = entry
-      camera.left = -1.8 * box.width / box.height
+      camera.left = -framing.halfHeight * box.width / box.height
       camera.right = -camera.left
       camera.updateProjectionMatrix()
       const angle = elevation * Math.PI / 180
@@ -111,7 +123,7 @@ export function createCupGallery(canvas: HTMLCanvasElement, views: CupView[], op
       camera.lookAt(0, 0, 0)
       renderer.setViewport(box.left - bounds.left, bounds.bottom - box.bottom, box.width, box.height)
       renderer.setScissor(box.left - bounds.left, bounds.bottom - box.bottom, box.width, box.height)
-      updateMask(entry, box.height * density / FRAME_HEIGHT)
+      updateMask(entry, box.height * density / (2 * framing.halfHeight))
       renderer.render(entry.scene, camera)
     }
     frames++

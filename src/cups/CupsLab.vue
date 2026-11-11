@@ -2,25 +2,36 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { vessels } from './catalogue'
 import { designCollections } from './designs'
-import { palette } from './palette'
+import { palette, paletteVessel } from './palette'
 import { bandLayout, designSvg } from './pattern'
 import type { createCupGallery } from './renderer'
+import type { AccessoryId } from './accessories'
 import './lab.css'
 
-type Study = 'shapes' | 'colours' | 'designs'
+type Study = 'shapes' | 'colours' | 'designs' | 'accessories'
 const STUDIES: Record<Study, { number: string; label: string; eyebrow: string; title: string; description: string }> = {
   shapes: { number: '01', label: 'Shapes', eyebrow: 'STUDY 01 / FORM', title: 'A little character.', description: 'Eighteen shapes. Two eyes. Nothing extra.' },
-  colours: { number: '02', label: 'Colours', eyebrow: 'STUDY 02 / COLOUR', title: 'Find its colour.', description: 'One shape. Twelve colours. Pick one to try it.' },
-  designs: { number: '03', label: 'Designs', eyebrow: 'STUDY 03 / PATTERN', title: 'Give it a pattern.', description: 'Choose a culture. Three patterns per vessel. Drag the cup to turn it.' }
+  colours: { number: '02', label: 'Colours', eyebrow: 'STUDY 02 / COLOUR', title: 'Find its colour.', description: 'Twelve forms. Twelve colours. Pick a cup to try them.' },
+  designs: { number: '03', label: 'Designs', eyebrow: 'STUDY 03 / PATTERN', title: 'Give it a pattern.', description: 'Choose a culture. Three patterns per vessel. Drag the cup to turn it.' },
+  accessories: { number: '04', label: 'Accessories', eyebrow: 'STUDY 04 / ACCESSORIES', title: 'Find the right fit.', description: 'Choose any cup. We’ll add accessories one at a time.' }
 }
+const ACCESSORIES: { id: AccessoryId; name: string }[] = [
+  { id: 'paintbrush', name: 'Paintbrush' },
+  { id: 'leaf', name: 'Leaf' },
+  { id: 'beret', name: 'Beret' },
+  { id: 'tea-bag', name: 'Tea bag' },
+  { id: 'headphones', name: 'Headphones' },
+  { id: 'scarf', name: 'Scarf' }
+]
 
 const canvas = ref<HTMLCanvasElement>()
 const stage = ref<HTMLElement>()
 const study = ref<Study>('shapes')
 const theme = ref<'light' | 'dark'>('light')
 const selected = ref('terracotta')
+const colourCupId = ref(vessels[0]!.id)
 const colour = computed(() => palette.find(option => option.id === selected.value)!)
-const preview = computed(() => ({ ...vessels[0]!, colors: { ...colour.value.colors } }))
+const preview = computed(() => paletteVessel(vessels.find(vessel => vessel.id === colourCupId.value)!, colour.value.colors))
 const cultureId = ref(designCollections[0]!.id)
 const collection = computed(() => designCollections.find(option => option.id === cultureId.value)!)
 const designVessel = computed(() => collection.value.vessel)
@@ -30,8 +41,23 @@ const designId = computed({
   set: (value: string) => { chosenDesigns.value[cultureId.value] = value }
 })
 const design = computed(() => collection.value.designs.find(option => option.id === designId.value)!)
-const shownVessels = computed(() => study.value === 'shapes' ? vessels : study.value === 'colours' ? [preview.value] : [designVessel.value])
+const accessoryCupId = ref(vessels[0]!.id)
+const accessoryId = ref<AccessoryId>(ACCESSORIES[0]!.id)
+const BUILT_ACCESSORIES: AccessoryId[] = ['paintbrush']
+// Seuls les accessoires déjà modélisés apparaissent ; les autres laissent la tasse nue.
+const shownAccessory = computed(() => study.value === 'accessories' && BUILT_ACCESSORIES.includes(accessoryId.value) && !still.value ? accessoryId.value : undefined)
+const accessoryCup = computed(() => vessels.find(vessel => vessel.id === accessoryCupId.value)!)
+const cupId = computed({
+  get: () => study.value === 'colours' ? colourCupId.value : accessoryCupId.value,
+  set: (value: string) => {
+    if (study.value === 'colours') colourCupId.value = value
+    else accessoryCupId.value = value
+  }
+})
+const shownVessels = computed(() => study.value === 'shapes' ? vessels : study.value === 'colours' ? [preview.value] : study.value === 'designs' ? [designVessel.value] : [accessoryCup.value])
 const single = computed(() => study.value !== 'shapes')
+const hasCupPicker = computed(() => study.value === 'colours' || study.value === 'accessories')
+const manual = computed(() => study.value === 'designs' || study.value === 'accessories')
 const turning = ref(false)
 const elevation = ref(16)
 const turn = ref(0)
@@ -39,8 +65,9 @@ const fallback = ref(false)
 const reduced = ref(false)
 const ready = ref(false)
 // La platine reste en 3D avec mouvement réduit : rien ne bouge sans la main de l'utilisateur.
-const still = computed(() => fallback.value || (reduced.value && study.value !== 'designs'))
-const elevationRange = computed(() => study.value === 'designs' ? [-20, 60] : [0, 32])
+const still = computed(() => fallback.value || (reduced.value && !manual.value))
+const elevationRange = computed(() => manual.value ? [-20, 60] : [0, 32])
+const everydayVessels = vessels.filter(vessel => !vessel.heritage)
 const culturalVessels = vessels.filter(vessel => vessel.heritage)
 const culturalStart = vessels.findIndex(vessel => vessel.heritage)
 let gallery: ReturnType<typeof createCupGallery> | undefined
@@ -73,13 +100,17 @@ async function syncMotion() {
     ready.value = true
   } else if (!gallery) {
     try {
-      const { createCupGallery } = await import('./renderer')
+      const { ACCESSORY_FRAME, createCupGallery } = await import('./renderer')
       if (disposed || still.value || gallery || !canvas.value || !stage.value) return
       const elements = [...stage.value.querySelectorAll<HTMLElement>('.cup-viewport')]
       const designs = study.value === 'designs'
+      const accessories = study.value === 'accessories'
       gallery = createCupGallery(canvas.value, shownVessels.value.map((vessel, i) => ({
-        vessel, element: elements[i]!, design: designs ? design.value : undefined
-      })), { turntable: designs, onTurn: degrees => { turn.value = degrees } })
+        vessel, element: elements[i]!, design: designs ? design.value : undefined, accessory: accessories ? shownAccessory.value : undefined
+      })), {
+        turntable: manual.value, initialTurn: accessories ? turn.value : 0, onTurn: degrees => { turn.value = degrees },
+        frame: accessories ? ACCESSORY_FRAME : undefined
+      })
       galleryVesselId = designs ? designVessel.value.id : undefined
       gallery.setElevation(elevation.value)
       ready.value = true
@@ -97,13 +128,16 @@ watch(selected, () => {
 watch(design, () => {
   if (study.value === 'designs' && galleryVesselId === designVessel.value.id) gallery?.setDesign(0, design.value)
 })
-watch([study, cultureId], async ([currentStudy], [previousStudy]) => {
-  if (currentStudy === previousStudy && currentStudy !== 'designs') return
+watch([study, cultureId, cupId, shownAccessory], async ([currentStudy, currentCulture, currentCup, currentAccessory], [previousStudy, previousCulture, previousCup, previousAccessory]) => {
+  if (currentStudy === previousStudy &&
+      !(currentStudy === 'designs' && currentCulture !== previousCulture) &&
+      !((currentStudy === 'colours' || currentStudy === 'accessories') && currentCup !== previousCup) &&
+      !(currentStudy === 'accessories' && currentAccessory !== previousAccessory)) return
   gallery?.dispose()
   gallery = undefined
   galleryVesselId = undefined
   turning.value = false
-  turn.value = 0
+  if (currentStudy !== 'accessories' || previousStudy !== 'accessories') turn.value = 0
   const [min, max] = elevationRange.value
   elevation.value = Math.max(min!, Math.min(max!, elevation.value))
   ready.value = false
@@ -123,12 +157,13 @@ function changeElevation(event: Event) {
 
 function label(vessel: typeof vessels[number]) {
   if (study.value === 'designs') return `${vessel.name} with the ${design.value.name.toLowerCase()} pattern, ${collection.value.colorDescription}, turned ${turn.value} degrees`
+  if (study.value === 'accessories') return `${vessel.name}, grey with ${shownAccessory.value ? `a ${ACCESSORIES.find(option => option.id === shownAccessory.value)!.name.toLowerCase()}` : 'no accessories'}${still.value ? '' : `, turned ${turn.value} degrees`}`
   return `${vessel.name}, ${study.value === 'shapes' ? 'grey' : colour.value.name} with ${vessel.colors.eyes === '#1c1c1a' ? 'dark' : 'white'} eyes${vessel.lid || vessel.parts.some(part => part.id === 'lid') ? ' and a lid' : ' and a dark interior'}`
 }
 
 function stillSource(vessel: typeof vessels[number]) {
-  if (study.value === 'shapes') return `/cups/stills/${vessel.id}.png`
-  if (study.value === 'colours') return `/cups/stills/palette/${selected.value}.png`
+  if (study.value === 'shapes' || study.value === 'accessories') return `/cups/stills/${vessel.id}.png`
+  if (study.value === 'colours') return `/cups/stills/palette/${vessel.id === 'mug' ? '' : `${vessel.id}/`}${selected.value}.png`
   return `/cups/stills/designs/${designId.value}.png`
 }
 
@@ -172,7 +207,18 @@ onUnmounted(() => {
           <p class="study-description">{{ STUDIES[study].description }}</p>
         </div>
 
-        <div :class="{ 'colour-workspace': single }">
+        <div :class="{ 'colour-workspace': single, 'cup-picker-workspace': hasCupPicker }">
+          <label v-if="hasCupPicker" class="culture-control cup-control">Cup
+            <select v-model="cupId" aria-label="Cup">
+              <optgroup label="Everyday forms">
+                <option v-for="vessel in everydayVessels" :key="vessel.id" :value="vessel.id">{{ vessel.name }}</option>
+              </optgroup>
+              <optgroup v-if="study === 'accessories'" label="Cultural forms">
+                <option v-for="vessel in culturalVessels" :key="vessel.id" :value="vessel.id">{{ vessel.name }}</option>
+              </optgroup>
+            </select>
+          </label>
+
           <div ref="stage" class="cup-stage" :class="{ 'single-preview': single }" :data-ready="ready">
             <canvas ref="canvas" class="cup-canvas" :class="{ 'is-hidden': still }" aria-hidden="true" />
             <template v-for="(vessel, i) in shownVessels" :key="`${study}-${vessel.id}`">
@@ -182,7 +228,7 @@ onUnmounted(() => {
                 <p>Specific references. Many local variations.</p>
               </div>
               <figure class="cup-item">
-                <div v-if="study === 'designs' && !still" class="cup-viewport is-turntable" role="slider" tabindex="0"
+                <div v-if="manual && !still" class="cup-viewport is-turntable" role="slider" tabindex="0"
                   aria-label="Turn the cup" aria-valuemin="0" aria-valuemax="359" :aria-valuenow="turn"
                   :aria-valuetext="label(vessel)" />
                 <div v-else class="cup-viewport" role="img" :aria-label="label(vessel)">
@@ -191,14 +237,15 @@ onUnmounted(() => {
                 <figcaption>
                   <template v-if="study === 'shapes'"><span class="cup-number">{{ String(i + 1).padStart(2, '0') }}</span>{{ vessel.name }}</template>
                   <template v-else-if="study === 'colours'">{{ vessel.name }} · {{ colour.name }}</template>
-                  <template v-else>{{ vessel.name }} · {{ design.name }}</template>
+                  <template v-else-if="study === 'designs'">{{ vessel.name }} · {{ design.name }}</template>
+                  <template v-else>{{ vessel.name }}</template>
                   <span v-if="vessel.heritage" class="cup-origin">{{ vessel.heritage.origin }}</span>
                 </figcaption>
               </figure>
             </template>
           </div>
 
-          <fieldset v-if="study === 'colours'" class="palette-picker">
+          <fieldset v-if="study === 'colours'" class="palette-picker colour-picker">
             <legend>Body colour</legend>
             <div class="palette-options">
               <label v-for="option in palette" :key="option.id" class="palette-option" :class="{ 'is-selected': selected === option.id }">
@@ -207,7 +254,7 @@ onUnmounted(() => {
                 <span>{{ option.name }}<small>{{ option.colors.body.toUpperCase() }}</small></span>
               </label>
             </div>
-            <p class="palette-note">The inside, rim and eyes follow your choice.</p>
+            <p class="palette-note">{{ colourCupId === 'takeaway' ? 'The lid stays light grey. The body, inside and eyes follow your choice.' : 'The inside, rim and eyes follow your choice.' }}</p>
           </fieldset>
 
           <div v-if="study === 'designs'" class="palette-picker design-picker">
@@ -227,6 +274,19 @@ onUnmounted(() => {
               </div>
             </fieldset>
             <p class="palette-note">Bold shapes for small avatars. One ink on the body, with colours kept separate from the pattern.</p>
+          </div>
+
+          <div v-if="study === 'accessories'" class="accessory-picker">
+            <fieldset class="palette-picker">
+              <legend>Accessory</legend>
+              <div class="design-options">
+                <label v-for="option in ACCESSORIES" :key="option.id" class="palette-option accessory-option" :class="{ 'is-selected': accessoryId === option.id }">
+                  <input v-model="accessoryId" type="radio" name="cup-accessory" :value="option.id" :aria-label="option.name" />
+                  <span>{{ option.name }}</span>
+                </label>
+              </div>
+            </fieldset>
+            <p class="palette-note">{{ accessoryId === 'paintbrush' ? 'Bristles out. The handle rests on the bottom and the right opening edge. The gaiwan lid rests against the brush.' : 'Not modelled yet. Accessory previews are added one at a time.' }}</p>
           </div>
         </div>
 
@@ -265,7 +325,7 @@ onUnmounted(() => {
         </details>
 
         <div class="study-controls">
-          <p class="interaction-hint">{{ fallback ? 'Static previews · WebGL unavailable' : study === 'designs' ? 'Drag the cup to turn it. Arrow keys work too.' : reduced ? 'Reduced motion · static previews' : 'Move your cursor. They’re curious.' }}</p>
+          <p class="interaction-hint">{{ fallback ? 'Static previews · WebGL unavailable' : manual ? 'Drag the cup to turn it. Arrow keys work too.' : reduced ? 'Reduced motion · static previews' : 'Move your cursor. They’re curious.' }}</p>
           <div v-if="!still" class="controls">
             <label class="angle-control">View angle
               <input aria-label="View angle" type="range" :min="elevationRange[0]" :max="elevationRange[1]" step="1" :value="elevation" @input="changeElevation" />

@@ -1,5 +1,93 @@
 # Huitaca Cups lab
 
+## Paintbrush, supported fitting
+
+- The first accessory uses the later supplied reference: mustard handle,
+  cream ferrule and terracotta bristles, pointing out of the cup.
+- Alessandro approved the compact revision: handles and ferrules are 30%
+  thicker except on the takeaway, whose handle stays narrow for its sip hole.
+  The exposed handle is 0.38 instead of 0.50 units; bristles are 40% wider
+  and 0.40 instead of 0.36 units long. Total exposed length falls from 1.00
+  to 0.92 units, retaining the two supports with the revised dimensions.
+- Alessandro corrected the initial fixed-angle approach. Each brush now has
+  two actual supports: its lower end on the interior floor and its tapered
+  handle against the right opening edge. Cup height, floor and rim profiles
+  determine its angle and insertion depth, not a shared chosen angle.
+- The lower end starts at the floor centre. On the çay glass it moves slightly
+  left to clear the narrow neck while retaining floor and rim contact.
+  The takeaway uses the right sip-hole lip as its upper support; its handle
+  passes through the existing throat without changing the hole.
+- The gaiwan brush rests on its floor and right seat edge. Its lid pivots on
+  the left seat and rests against the handle on the right. Its tilt is derived
+  from those contacts, replacing the earlier chosen 22-degree tilt.
+  Only the brush variant moves the lid; grey Shapes and Designs stay unchanged.
+- The fit is computed once per vessel definition and cached. Nothing solves
+  or adjusts the pose during rotation, elevation changes or idle rendering.
+  The accessory frame supplies headroom without changing other studies.
+- Other accessory choices remain unmodelled. A WebGL failure still displays
+  the matching bare grey cup and labels it as having no accessories.
+- Validation checks floor and right-edge contact on all eighteen rendered
+  models, tapered-handle clearance along the full interior, the sip-hole
+  throat, the lid's two contacts, framing and construction-only fitting.
+  All 464 tests across 21 files, strict TypeScript, production build and
+  `git diff --check` pass.
+  Visual review of this correction is left to Alessandro; no browser preview
+  or screenshots were taken for it.
+
+## Colour cup picker and takeaway lid
+
+- Colours now offers the twelve non-cultural cups only. The six cultural
+  vessels do not enter this palette study. Cup selection is independent of
+  Accessories; both the chosen cup and colour are remembered between studies.
+- The shared cup-picker layout places the selector above the palette on
+  desktop and above the preview below 64rem. Changing colour still updates
+  materials in place; changing cup rebuilds only the selected preview.
+- The takeaway lid has fixed neutral slots: shell `#c4c6c0`, edge `#b9bbb5`,
+  opening wall `#a4a69f`. Alessandro rejected the earlier near-white shell
+  because it disappeared against the light background. The revised shell
+  remains lighter than all twelve body colours, with 1.58:1 contrast on
+  `#f5f5f5`. These are chosen flat colours, not measured plastic colours.
+- [Reliance white sipper dome lids](https://www.yourbrandcafe.com/products/white-sipper-dome-lids-for-10-24oz-paper-hot-cups/)
+  provide a reference for a separately supplied neutral lid, not a rule that
+  all takeaway lids are white. Grey Shapes and Accessories remain unchanged.
+  Only the Colours variant remaps the takeaway lid, edge and opening wall.
+- All 144 cup/colour pairs have 512px transparent PNG fallbacks from the
+  real renderer: the twelve existing mug images plus 132 additional images
+  under `public/cups/stills/palette/<vessel>/<colour>.png`. Only the selected
+  image is requested in static mode. No new dependencies or rendering effects.
+- Validation: 370 tests, strict TypeScript and the production build pass.
+  All 144 images contain the expected body and eye colours and share the
+  outer bounds of the existing grey stills. The fixed takeaway lid occupies
+  exactly 20,121 solid pixels in each of its twelve colour previews.
+- An additional pixel-exact alpha comparison is not identical at the handle
+  joins of Mug, Tall mug and Small cup (including the pre-existing mug
+  palette images); the other nine forms match exactly. No vessel geometry
+  or grey reference still was changed for this task.
+
+## Accessories layout study
+
+- Study 04 / Accessories uses a large inspection preview with a cup selector
+  on the right. All eighteen original grey vessels are available, grouped
+  into twelve everyday forms and six cultural forms. No palette or patterns.
+- Alessandro's reference defines six choices: Paintbrush, Leaf, Beret,
+  Tea bag, Headphones and Scarf. They are mutually exclusive, like the
+  Designs choices. Selection is remembered when switching cups or studies.
+- This initial layout checkpoint had no accessory models. The paintbrush is
+  now implemented as described above; other missing previews remain labelled.
+- Dragging, arrow keys and view-angle controls use the existing turntable.
+  Switching cups preserves the displayed rotation and elevation. Manual
+  inspection remains available with reduced motion; unavailable WebGL uses
+  the matching grey still instead and hides the rotation controls.
+- Below 64rem, the order is cup selector, preview, accessory choices.
+  Browser layout checks covered widths 320, 390, 768, 1023, 1024 and 1440,
+  including both sides of the breakpoint, with no horizontal overflow.
+  These used a same-origin iframe because the browser pane owns its viewport,
+  not device emulation. Light desktop and dark narrow layouts were inspected.
+- All eighteen cup selections and the six single-choice options were exercised
+  in the browser. Validation: 355 tests across 20 files, strict TypeScript and
+  the production build pass. The existing renderer bundle-size warning remains.
+  No new dependencies, lighting, shadows or automatic idle rendering.
+
 ## Podstakannik pattern study
 
 - Russia / Glass + podstakannik joins Designs with a windows row, a leaf

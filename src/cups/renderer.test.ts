@@ -1,7 +1,9 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { WebGLRenderer } from 'three'
 import { vessels } from './catalogue'
 import { createCupGallery } from './renderer'
+import * as accessories from './accessories'
 
 vi.mock('three', async importOriginal => {
   const original = await importOriginal<typeof import('three')>()
@@ -167,6 +169,48 @@ describe('on-demand cup renderer', () => {
     expect(onTurn).toHaveBeenCalledOnce()
     gallery.setTurning(true)
     step()
+    expect(queue.size).toBe(0)
+  })
+
+  it('restores the inspection rotation on the first frame and continues keyboard turning from that angle', () => {
+    gallery.dispose()
+    media.matches = true
+    const render = vi.spyOn(WebGLRenderer.prototype, 'render')
+    const onTurn = vi.fn()
+    gallery = createCupGallery(canvas, [{ element: canvas, vessel: vessels[17]! }], { turntable: true, initialTurn: 120, onTurn })
+    step()
+    expect(render.mock.calls.at(-1)![0].children[0]!.rotation.y).toBeCloseTo(2 * Math.PI / 3)
+    expect(queue.size).toBe(0)
+    canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }))
+    step()
+    expect(onTurn).toHaveBeenLastCalledWith(135)
+    expect(render.mock.calls.at(-1)![0].children[0]!.rotation.y).toBeCloseTo(3 * Math.PI / 4)
+    expect(queue.size).toBe(0)
+  })
+
+  it('fits the supported brush only at construction, never while turning or changing elevation', () => {
+    gallery.dispose()
+    const fit = vi.spyOn(accessories, 'fitBrush')
+    const render = vi.spyOn(WebGLRenderer.prototype, 'render')
+    const vessel = vessels.find(vessel => vessel.id === 'gaiwan')!
+    const original = JSON.stringify(vessel)
+    gallery = createCupGallery(canvas, [{ element: canvas, vessel, accessory: 'paintbrush' }], {
+      turntable: true, frame: { lift: 1.4, halfHeight: 2.05 }
+    })
+    step()
+    expect(fit).toHaveBeenCalledTimes(1)
+    const root = render.mock.calls.at(-1)![0].children[0]!
+    const brush = root.getObjectByName('paintbrush')!
+    const lid = root.getObjectByName('lid')!
+    const pose = [brush.position.toArray(), brush.rotation.toArray(), lid.position.toArray(), lid.rotation.toArray()]
+    for (let i = 0; i < 24; i++) {
+      canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }))
+      gallery.setElevation(-20 + i * 80 / 23)
+      step()
+    }
+    expect(fit).toHaveBeenCalledTimes(1)
+    expect([brush.position.toArray(), brush.rotation.toArray(), lid.position.toArray(), lid.rotation.toArray()]).toEqual(pose)
+    expect(JSON.stringify(vessel)).toBe(original)
     expect(queue.size).toBe(0)
   })
 })

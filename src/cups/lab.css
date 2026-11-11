@@ -81,6 +81,13 @@ a { color: inherit; }
 .design-options { display: grid; gap: 8px; }
 .culture-control { display: grid; gap: 12px; margin-bottom: 28px; font-size: 14px; font-weight: 600; }
 .culture-control select { width: 100%; min-width: 0; border: 1px solid var(--lab-border); border-radius: 5px; padding: 10px; background: var(--lab-bg); color: var(--lab-text); font: inherit; font-size: 13px; font-weight: 400; cursor: pointer; }
+.cup-picker-workspace { grid-template-rows: auto 1fr; gap: 28px 48px; align-items: start; }
+.cup-picker-workspace .cup-stage { grid-column: 1; grid-row: 1 / span 2; }
+.cup-control { grid-column: 2; grid-row: 1; margin: 0; }
+.colour-picker, .accessory-picker { grid-column: 2; grid-row: 2; }
+.accessory-picker { padding-top: 24px; border-top: 1px solid var(--lab-border); }
+.accessory-option { gap: 12px; padding: 12px 10px; font-size: 13px; }
+.accessory-option input { position: static; opacity: 1; width: 14px; height: 14px; margin: 0; accent-color: var(--lab-text); }
 .design-option { gap: 14px; font-size: 13px; }
 .design-swatch { display: block; width: 72px; height: 50px; flex-shrink: 0; border-radius: 4px; }
 .cup-viewport.is-turntable { cursor: grab; touch-action: none; border-radius: 8px; }
@@ -105,6 +112,11 @@ a { color: inherit; }
   .cup-study { padding: 32px 0 48px; }
   .study-heading { margin-bottom: 24px; }
   .colour-workspace { grid-template-columns: minmax(0, 1fr); gap: 32px; }
+  .cup-picker-workspace { grid-template-rows: auto auto auto; }
+  .cup-control, .colour-picker, .accessory-picker { grid-column: 1; width: 100%; max-width: 440px; justify-self: center; }
+  .cup-control { grid-row: 1; }
+  .cup-picker-workspace .cup-stage { grid-column: 1; grid-row: 2; }
+  .colour-picker, .accessory-picker { grid-row: 3; }
   .single-preview { max-width: 440px; }
   .palette-picker { width: 100%; max-width: 440px; justify-self: center; }
   .study-controls { flex-wrap: wrap; margin-top: 36px; }
