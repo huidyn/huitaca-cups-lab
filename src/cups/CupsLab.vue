@@ -43,7 +43,7 @@ const designId = computed({
 const design = computed(() => collection.value.designs.find(option => option.id === designId.value)!)
 const accessoryCupId = ref(vessels[0]!.id)
 const accessoryId = ref<AccessoryId>(ACCESSORIES[0]!.id)
-const BUILT_ACCESSORIES: AccessoryId[] = ['paintbrush']
+const BUILT_ACCESSORIES: AccessoryId[] = ['paintbrush', 'beret']
 // Seuls les accessoires déjà modélisés apparaissent ; les autres laissent la tasse nue.
 const shownAccessory = computed(() => study.value === 'accessories' && BUILT_ACCESSORIES.includes(accessoryId.value) && !still.value ? accessoryId.value : undefined)
 const accessoryCup = computed(() => vessels.find(vessel => vessel.id === accessoryCupId.value)!)
@@ -286,7 +286,7 @@ onUnmounted(() => {
                 </label>
               </div>
             </fieldset>
-            <p class="palette-note">{{ accessoryId === 'paintbrush' ? 'Bristles out. The handle rests on the bottom and the right opening edge. The gaiwan lid rests against the brush.' : 'Not modelled yet. Accessory previews are added one at a time.' }}</p>
+            <p class="palette-note">{{ accessoryId === 'paintbrush' ? 'Bristles out. The handle rests on the bottom and the right opening edge. The gaiwan lid rests against the brush.' : accessoryId === 'beret' ? 'A soft red beret, slouched to one side. The band rests on the rim, over the existing lid where present.' : 'Not modelled yet. Accessory previews are added one at a time.' }}</p>
           </div>
         </div>
 

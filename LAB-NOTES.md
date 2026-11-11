@@ -1,5 +1,87 @@
 # Huitaca Cups lab
 
+## Beret reference-shape correction
+
+- Alessandro supplied the original accessory reference again and requested
+  a rounder crown, a larger stem for small avatars, less sideways spread and
+  a stronger downward droop. The revised profile is more compact and domed,
+  with additional profile rows rounding its outline.
+- The lower left fold now drops below the band, outside the cup wall.
+  The band still rests on the original rim or lid seat, and the cover-clearance
+  bounds include the revised droop. Existing cup and lid geometry is untouched.
+- The stem is nearly twice as wide and tall, with a rounded end, a small lean
+  and a position near the crown centre. The darker stem and subtle fixed edge
+  tones from the previous trial are retained.
+- Geometry tests check the downward fold against actual cup walls on all
+  eighteen vessels. Raycasts also check distinct stem coverage in a 64-pixel
+  square using the real accessory frame and starting elevation, from four
+  sides. This is a geometry check, not a browser capture; Alessandro owns
+  the visual review.
+- Follow-up: Alessandro approved the revised silhouette and requested just
+  another 20% increase to the stem. Its mesh scales uniformly by 1.2 about
+  its attachment point; crown, band, placement and lean are unchanged.
+- Alessandro approved the final result as clearly reading as a beret and
+  requested this commit, including the edge-tone changes.
+- Validation: all 579 tests across 23 files, strict TypeScript, production
+  build and `git diff --check` pass. The existing renderer chunk-size warning
+  remains.
+
+## Edge-tone trial: beret and takeaway lid
+
+- Alessandro reported that the red stem disappeared into the beret crown and
+  the takeaway lid's relief read as one flat shape. The approved treatment
+  applies to live WebGL previews; existing static PNGs remain unchanged.
+- The beret stem now shares the deeper red of the band. Its crown and the
+  takeaway lid receive subtle, baked vertex tones: horizontal faces keep
+  their base colour, while vertical edges multiply linear RGB by 0.82.
+  Slopes interpolate between those limits to reveal the outer fold, bevel
+  and raised sip lip.
+- This is not scene lighting or a shadow effect. The tones use object-space
+  geometry normals once at construction, with no camera, time or light input.
+  Geometry, fit, hole size, lid position and approved palette base colours
+  are unchanged. Other cups and their faces remain completely flat.
+- Toned lid materials are separate from ordinary materials, even when they
+  share the same colour slot in the grey catalogue. Colour updates reach
+  both caches without rebuilding geometry; disposal releases both caches.
+- Tests check tonal bounds, the untouched top colour, separate stem colour
+  and low-angle visibility, all twelve palette options and the grey lid,
+  untinted bodies/eyes, material updates and disposal.
+- Validation: all 560 tests across 23 files, strict TypeScript, production
+  build and `git diff --check` pass. The existing renderer chunk-size warning
+  remains. No browser preview or screenshots were taken.
+
+## Red beret
+
+- Alessandro approved a soft red beret with a broad, side-slouched crown,
+  narrow band and small top stem. No badge, star, insignia or fabric texture.
+  The intended reading is creative/artistic, not a uniform. Red cannot be
+  claimed to have no political or military associations in every context.
+  The scarf is planned in blue but remains unmodelled.
+- The crown and stem use flat red `#c84444`; the band is deeper red `#a93636`.
+  The band stays horizontal, while the crown spreads and falls to the left.
+  All three meshes are unlit and cast no shadows.
+- The band fits the actual top rim or lid-seat radius on each of the eighteen
+  cups. On the takeaway it rests on the existing lid's outer flat ledge.
+  On the gaiwan it rests on the seat, with the existing lid and knob enclosed
+  by the crown. Neither lid is moved or removed.
+- Crown height adapts to the existing cover. Conservative bounds on its
+  nested polygon rings keep the shell above the lid and knob, including the
+  raised takeaway sip lip. The fit is cached by vessel definition and never
+  recalculated during rotation, elevation changes or idle rendering.
+- Beret selection uses the existing accessory controls and manual turntable.
+  It preserves cup selection, rotation and elevation when switching to or
+  from the paintbrush. Reduced motion keeps manual inspection; WebGL failure
+  still shows and labels the bare grey cup, not a pretend accessory still.
+- Tests check all eighteen models for rim contact around the full band,
+  broad slouched proportions, complete framing, unchanged cup geometry and
+  colour slots. Raycasts check lid vertices and triangle interiors against
+  the crown and band. Tests also cover disposal, construction-only fitting,
+  accessory switching, reduced motion and the WebGL fallback.
+- Visual review is left to Alessandro. No browser preview or screenshots.
+- Validation: all 543 tests across 22 files, strict TypeScript, production
+  build and `git diff --check` pass. Vite retains the existing warning about
+  the lazy renderer chunk exceeding 500 kB.
+
 ## Paintbrush, supported fitting
 
 - The first accessory uses the later supplied reference: mustard handle,
@@ -24,7 +106,7 @@
 - The fit is computed once per vessel definition and cached. Nothing solves
   or adjusts the pose during rotation, elevation changes or idle rendering.
   The accessory frame supplies headroom without changing other studies.
-- Other accessory choices remain unmodelled. A WebGL failure still displays
+- At this checkpoint, other accessory choices remained unmodelled. A WebGL failure still displays
   the matching bare grey cup and labels it as having no accessories.
 - Validation checks floor and right-edge contact on all eighteen rendered
   models, tapered-handle clearance along the full interior, the sip-hole

@@ -467,10 +467,10 @@ describe('cup lab cultural section', () => {
       expect(root.querySelector<HTMLInputElement>('input[name="cup-accessory"]:checked')!.value).toBe(input.value)
       expect(input.closest('label')!.classList.contains('is-selected')).toBe(true)
       await vi.waitFor(() => expect(root.querySelector('.cup-stage')?.getAttribute('data-ready')).toBe('true'))
-      expect(vi.mocked(createCupGallery).mock.calls.at(-1)![1][0]!.accessory).toBe(input.value === 'paintbrush' ? 'paintbrush' : undefined)
+      expect(vi.mocked(createCupGallery).mock.calls.at(-1)![1][0]!.accessory).toBe(['paintbrush', 'beret'].includes(input.value) ? input.value : undefined)
     }
-    // Pinceau → feuille reconstruit une fois ; entre accessoires non modélisés, rien.
-    expect(createCupGallery).toHaveBeenCalledTimes(calls + 1)
+    // Pinceau → feuille → béret → sachet ; entre accessoires non modélisés, rien.
+    expect(createCupGallery).toHaveBeenCalledTimes(calls + 3)
     expect(root.querySelector('.accessory-picker')?.textContent).toContain('Not modelled yet.')
     expect(gallery.setDesign).not.toHaveBeenCalled()
     await chooseCup(vessels[17]!.id)
@@ -479,6 +479,43 @@ describe('cup lab cultural section', () => {
     await chooseStudy('Accessories')
     expect(root.querySelector<HTMLInputElement>('input[value="scarf"]')!.checked).toBe(true)
     expect(root.querySelector('.cup-viewport')?.getAttribute('aria-valuetext')).toContain('grey with no accessories')
+  })
+
+  it.each([false, true])('shows the red beret on every cup and retains selection and viewing angles (reduced motion: %s)', async reduced => {
+    await mount(reduced)
+    await chooseStudy('Accessories')
+    vi.mocked(createCupGallery).mock.calls.at(-1)![2]!.onTurn!(135)
+    const angle = root.querySelector<HTMLInputElement>('[aria-label="View angle"]')!
+    angle.value = '42'
+    angle.dispatchEvent(new Event('input', { bubbles: true }))
+    await nextTick()
+    for (const accessory of ['beret', 'paintbrush', 'beret']) {
+      const calls = vi.mocked(createCupGallery).mock.calls.length
+      root.querySelector<HTMLInputElement>(`input[value="${accessory}"]`)!.click()
+      await nextTick()
+      await vi.waitFor(() => expect(createCupGallery).toHaveBeenCalledTimes(calls + 1))
+      expect(vi.mocked(createCupGallery).mock.calls.at(-1)![1][0]!.accessory).toBe(accessory)
+      expect(vi.mocked(createCupGallery).mock.calls.at(-1)![2]?.initialTurn).toBe(135)
+      expect(gallery.setElevation).toHaveBeenLastCalledWith(42)
+    }
+    for (const vessel of vessels) {
+      await chooseCup(vessel.id)
+      expect(vi.mocked(createCupGallery).mock.calls.at(-1)![1][0]!.accessory).toBe('beret')
+      expect(root.querySelector('.cup-viewport')?.getAttribute('aria-valuetext'))
+        .toBe(`${vessel.name}, grey with a beret, turned 135 degrees`)
+      expect(root.querySelector('.palette-note')?.textContent).toContain('soft red beret')
+      expect(root.querySelector('[aria-label="Turn the cup"]')).not.toBeNull()
+    }
+    const calls = vi.mocked(createCupGallery).mock.calls.length
+    root.querySelector<HTMLInputElement>('input[value="beret"]')!.click()
+    await nextTick()
+    expect(createCupGallery).toHaveBeenCalledTimes(calls)
+    await chooseStudy('Shapes')
+    if (reduced) expect(root.querySelectorAll('.cup-viewport img')).toHaveLength(18)
+    else expect(vi.mocked(createCupGallery).mock.calls.at(-1)![1].every(view => view.accessory === undefined)).toBe(true)
+    await chooseStudy('Accessories')
+    expect(root.querySelector<HTMLInputElement>('input[value="beret"]')!.checked).toBe(true)
+    expect(vi.mocked(createCupGallery).mock.calls.at(-1)![1][0]!.accessory).toBe('beret')
   })
 
   it('keeps the viewing angle across repeated cup changes and remembers the cup independently of the other studies', async () => {
@@ -540,11 +577,15 @@ describe('cup lab cultural section', () => {
     await mount()
     vi.mocked(createCupGallery).mockImplementationOnce(() => { throw new Error('WebGL unavailable') })
     await chooseStudy('Accessories')
-    for (const vessel of vessels) {
-      await chooseCup(vessel.id)
-      expect(root.querySelector('.cup-viewport img')?.getAttribute('src')).toBe(`/cups/stills/${vessel.id}.png`)
-      expect(root.querySelector('.cup-viewport')?.getAttribute('aria-label')).toBe(`${vessel.name}, grey with no accessories`)
-      expect(root.querySelector('[aria-label="Turn the cup"], [aria-label="View angle"]')).toBeNull()
+    for (const accessory of ['paintbrush', 'beret']) {
+      root.querySelector<HTMLInputElement>(`input[value="${accessory}"]`)!.click()
+      await nextTick()
+      for (const vessel of vessels) {
+        await chooseCup(vessel.id)
+        expect(root.querySelector('.cup-viewport img')?.getAttribute('src')).toBe(`/cups/stills/${vessel.id}.png`)
+        expect(root.querySelector('.cup-viewport')?.getAttribute('aria-label')).toBe(`${vessel.name}, grey with no accessories`)
+        expect(root.querySelector('[aria-label="Turn the cup"], [aria-label="View angle"]')).toBeNull()
+      }
     }
     expect(createCupGallery).toHaveBeenCalledTimes(2)
     expect(root.textContent).toContain('WebGL unavailable')

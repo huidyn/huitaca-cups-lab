@@ -6,6 +6,8 @@ import {
 import type { Point2, VesselDefinition } from './types'
 import { createLidGeometry } from './lid'
 import { type AccessoryId, createPaintbrush, fitBrush, GAIWAN_LID_PARTS } from './accessories'
+import { createBeret, fitBeret } from './beret'
+import { addEdgeTones } from './edge-tones'
 import { bandLayout } from './pattern'
 
 export function radiusAtY(outline: Point2[], y: number): number {
@@ -93,13 +95,15 @@ export function createHandleGeometry(handle: NonNullable<VesselDefinition['handl
 export function createCup(definition: VesselDefinition, options: { pattern?: boolean; accessory?: AccessoryId } = {}) {
   const root = new Group()
   const materials = new Map<string, MeshBasicMaterial>()
-  const material = (slot: string) => {
-    let found = materials.get(slot)
+  const tonedMaterials = new Map<string, MeshBasicMaterial>()
+  const material = (slot: string, edgeTones = false) => {
+    const cache = edgeTones ? tonedMaterials : materials
+    let found = cache.get(slot)
     if (!found) {
       found = new MeshBasicMaterial({
-        color: definition.colors[slot], side: DoubleSide, toneMapped: false
+        color: definition.colors[slot], side: DoubleSide, toneMapped: false, vertexColors: edgeTones
       })
-      materials.set(slot, found)
+      cache.set(slot, found)
     }
     return found
   }
@@ -109,6 +113,8 @@ export function createCup(definition: VesselDefinition, options: { pattern?: boo
   let patternSlot = ''
   for (const part of definition.parts) {
     const geometry = new LatheGeometry(part.outline.map(([r, y]) => new Vector2(r, y)), 96)
+    const edgeTones = !!definition.lid && (part.id === 'lid' || part.id === 'lid-edge')
+    if (edgeTones) addEdgeTones(geometry)
     if (band && part.id === band.surface) {
       // u fait le tour depuis le visage (u = 0) ; les sommets de la jointure sont doublés
       // en u = 0 et u = 1, donc aucun triangle n'interpole à travers elle.
@@ -120,7 +126,7 @@ export function createCup(definition: VesselDefinition, options: { pattern?: boo
       patternSlot = part.color
       patternMaterial = createPatternMaterial(definition.colors, part.color)
     }
-    const mesh = new Mesh(geometry, band && part.id === band.surface ? patternMaterial! : material(part.color))
+    const mesh = new Mesh(geometry, band && part.id === band.surface ? patternMaterial! : material(part.color, edgeTones))
     mesh.name = part.id
     root.add(mesh)
   }
@@ -131,7 +137,9 @@ export function createCup(definition: VesselDefinition, options: { pattern?: boo
     const group = new Group()
     group.name = 'lid-top'
     for (const [name, geometry] of Object.entries(geometries)) {
-      const mesh = new Mesh(geometry, material(name === 'throat' ? lid.insideColor : lid.color))
+      const edgeTones = name !== 'throat'
+      if (edgeTones) addEdgeTones(geometry)
+      const mesh = new Mesh(geometry, material(name === 'throat' ? lid.insideColor : lid.color, edgeTones))
       mesh.name = `lid-${name}`
       group.add(mesh)
     }
@@ -146,6 +154,11 @@ export function createCup(definition: VesselDefinition, options: { pattern?: boo
   }
 
   const extraMaterials: MeshBasicMaterial[] = []
+  if (options.accessory === 'beret') {
+    const beret = createBeret(fitBeret(definition))
+    extraMaterials.push(...beret.materials)
+    root.add(beret.group)
+  }
   if (options.accessory === 'paintbrush') {
     const fit = fitBrush(definition)
     const brush = createPaintbrush(fit)
@@ -223,9 +236,11 @@ export function createCup(definition: VesselDefinition, options: { pattern?: boo
     root,
     look,
     setColors(colors: Record<string, string>) {
-      materials.forEach((material, slot) => {
+      const update = (material: MeshBasicMaterial, slot: string) => {
         if (colors[slot]) material.color.set(colors[slot])
-      })
+      }
+      materials.forEach(update)
+      tonedMaterials.forEach(update)
       if (patternMaterial) {
         const u = patternMaterial.uniforms
         if (colors[patternSlot]) u.body!.value.set(colors[patternSlot])
@@ -252,6 +267,7 @@ export function createCup(definition: VesselDefinition, options: { pattern?: boo
         if (object instanceof Mesh) object.geometry.dispose()
       })
       materials.forEach(m => m.dispose())
+      tonedMaterials.forEach(m => m.dispose())
       extraMaterials.forEach(m => m.dispose())
       ;(patternMaterial?.uniforms.mask!.value as Texture | null)?.dispose()
       patternMaterial?.dispose()
