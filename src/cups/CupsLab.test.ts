@@ -467,7 +467,7 @@ describe('cup lab cultural section', () => {
       expect(root.querySelector<HTMLInputElement>('input[name="cup-accessory"]:checked')!.value).toBe(input.value)
       expect(input.closest('label')!.classList.contains('is-selected')).toBe(true)
       await vi.waitFor(() => expect(root.querySelector('.cup-stage')?.getAttribute('data-ready')).toBe('true'))
-      expect(vi.mocked(createCupGallery).mock.calls.at(-1)![1][0]!.accessory).toBe(['paintbrush', 'beret', 'tea-bag', 'scarf'].includes(input.value) ? input.value : undefined)
+      expect(vi.mocked(createCupGallery).mock.calls.at(-1)![1][0]!.accessory).toBe(['paintbrush', 'beret', 'tea-bag', 'headphones', 'scarf'].includes(input.value) ? input.value : undefined)
     }
     // Pinceau → feuille → béret → étiquette → casque → écharpe.
     expect(createCupGallery).toHaveBeenCalledTimes(calls + 5)
@@ -487,7 +487,9 @@ describe('cup lab cultural section', () => {
     { reduced: false, accessory: 'tea-bag', name: 'tea tag', note: 'yellow tea tag' },
     { reduced: true, accessory: 'tea-bag', name: 'tea tag', note: 'yellow tea tag' },
     { reduced: false, accessory: 'scarf', name: 'scarf', note: 'rich-blue scarf' },
-    { reduced: true, accessory: 'scarf', name: 'scarf', note: 'rich-blue scarf' }
+    { reduced: true, accessory: 'scarf', name: 'scarf', note: 'rich-blue scarf' },
+    { reduced: false, accessory: 'headphones', name: 'pair of headphones', note: 'Charcoal-grey headphones' },
+    { reduced: true, accessory: 'headphones', name: 'pair of headphones', note: 'Charcoal-grey headphones' }
   ])('shows the $name on every cup and retains selection and viewing angles (reduced motion: $reduced)', async ({ reduced, accessory: chosenAccessory, name, note }) => {
     await mount(reduced)
     await chooseStudy('Accessories')
@@ -580,19 +582,17 @@ describe('cup lab cultural section', () => {
     expect(root.textContent).not.toContain('Slow turn')
   })
 
-  it('uses the correct grey still for every accessory cup when WebGL is unavailable', async () => {
+  it.each(['paintbrush', 'beret', 'tea-bag', 'headphones', 'scarf'])('uses the correct grey still for every %s cup when WebGL is unavailable', async accessory => {
     await mount()
     vi.mocked(createCupGallery).mockImplementationOnce(() => { throw new Error('WebGL unavailable') })
     await chooseStudy('Accessories')
-    for (const accessory of ['paintbrush', 'beret', 'tea-bag', 'scarf']) {
-      root.querySelector<HTMLInputElement>(`input[value="${accessory}"]`)!.click()
-      await nextTick()
-      for (const vessel of vessels) {
-        await chooseCup(vessel.id)
-        expect(root.querySelector('.cup-viewport img')?.getAttribute('src')).toBe(`/cups/stills/${vessel.id}.png`)
-        expect(root.querySelector('.cup-viewport')?.getAttribute('aria-label')).toBe(`${vessel.name}, grey with no accessories`)
-        expect(root.querySelector('[aria-label="Turn the cup"], [aria-label="View angle"]')).toBeNull()
-      }
+    root.querySelector<HTMLInputElement>(`input[value="${accessory}"]`)!.click()
+    await nextTick()
+    for (const vessel of vessels) {
+      await chooseCup(vessel.id)
+      expect(root.querySelector('.cup-viewport img')?.getAttribute('src')).toBe(`/cups/stills/${vessel.id}.png`)
+      expect(root.querySelector('.cup-viewport')?.getAttribute('aria-label')).toBe(`${vessel.name}, grey with no accessories`)
+      expect(root.querySelector('[aria-label="Turn the cup"], [aria-label="View angle"]')).toBeNull()
     }
     expect(createCupGallery).toHaveBeenCalledTimes(2)
     expect(root.textContent).toContain('WebGL unavailable')

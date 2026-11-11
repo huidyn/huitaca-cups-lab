@@ -1,5 +1,54 @@
 # Huitaca Cups lab
 
+## Headphones: charcoal-grey over-ear headset
+
+- Alessandro requested the reference's simple arched headset, in grey rather
+  than pure black, with just enough shade to separate its parts. The band is
+  `#555958`, the rounded shells `#626665`, and the cushions `#474c4b`.
+  Existing fixed edge tones provide a little depth, without lights or shadows.
+- First version rejected: oval ear cups about a third of the cup wide, a slim
+  band, cushions floating off flared walls. "Everything on it is too small,
+  it doesn't fit cleanly, the earcups aren't circular."
+- Rebuild follows the reference's proportions: round ear cups about half the
+  cup's diameter (radius 0.52 × rim radius, 0.38 to 0.46 units), their tops
+  just under the rim. Each is a thick dark cushion under a rounded shell. The
+  band is 0.15 units thick, rises straight out of the shell tops, then arches.
+  No microphone, cable, logo or metal decoration. The headset has its own
+  colours, independent of the cup palette.
+- Fitting reads the actual rendered cup meshes, including non-indexed takeaway
+  lid triangles. Sixteen height slices establish the wall slope. Cushions are
+  now hollow foam rings, not solid discs: the curved wall can enter the recess
+  without holding the whole ear cup away from the body.
+- Exact contour matching was too much, especially on the gaiwan: the foam
+  looked moulded to the bowl. The final fit moves inward by at most 0.03 units
+  and smoothly adapts pad depth by at most 0.012 units. The pads keep their
+  rounded shape rather than filling every gap. Rigid shells remain clear;
+  the band's feet follow the closer cups while its upper legs retain clearance.
+- On handled cups, only the handle-side ear cup moves forward, like a headset
+  slid off one ear to listen: the other stays seated on its side. Both moving
+  forward was rejected as less clean. The moved cup advances just enough that
+  no handle vertex touches it, and the band follows the chord between the two
+  shells. Past about 36° it would cover the right eye in three-quarter views,
+  so on the tall mug's high handle the cups shrink slightly instead.
+  The podstakannik's handle sits below the cups, so nothing
+  moves there. The band's straight legs clear the gaiwan
+  lid edge and rolled rims; the arch clears lids, sip spouts and the gaiwan
+  knob. No cup, handle or lid moves.
+- The fit is cached at construction, never recomputed while turning or changing
+  elevation. The existing geometry/material disposal path owns every new mesh.
+- Headphones now work in Accessories across all eighteen cups and with reduced
+  motion. The existing grey stills remain the WebGL fallback; no new stills,
+  screenshots or browser previews were made. Visual review is pending.
+- Geometry tests cover hollow centres, bounded pad deformation, curved bowls
+  entering the recess, grey-tone separation, round ear-cup size, band-to-shell
+  connection, actual wall/lid clearance, close cushions, handle clearance,
+  full-gaze eye visibility from three yaw/elevation views, framing, repeatable
+  construction, unchanged cups, palette independence and disposal.
+- Validation after the hollow-pad refinement: all 986 tests across 26 files
+  pass, including 118 headphone tests. Strict `vue-tsc` and the production
+  build pass.
+  The existing lazy-renderer chunk-size warning remains.
+
 ## Scarf: thick knotted cloth below the eyes
 
 - Alessandro requested the reference's wrapped scarf, in a rich blue not

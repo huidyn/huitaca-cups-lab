@@ -43,7 +43,7 @@ const designId = computed({
 const design = computed(() => collection.value.designs.find(option => option.id === designId.value)!)
 const accessoryCupId = ref(vessels[0]!.id)
 const accessoryId = ref<AccessoryId>(ACCESSORIES[0]!.id)
-const BUILT_ACCESSORIES: AccessoryId[] = ['paintbrush', 'beret', 'tea-bag', 'scarf']
+const BUILT_ACCESSORIES: AccessoryId[] = ['paintbrush', 'beret', 'tea-bag', 'headphones', 'scarf']
 // Seuls les accessoires déjà modélisés apparaissent ; les autres laissent la tasse nue.
 const shownAccessory = computed(() => study.value === 'accessories' && BUILT_ACCESSORIES.includes(accessoryId.value) && !still.value ? accessoryId.value : undefined)
 const accessoryCup = computed(() => vessels.find(vessel => vessel.id === accessoryCupId.value)!)
@@ -157,7 +157,7 @@ function changeElevation(event: Event) {
 
 function label(vessel: typeof vessels[number]) {
   if (study.value === 'designs') return `${vessel.name} with the ${design.value.name.toLowerCase()} pattern, ${collection.value.colorDescription}, turned ${turn.value} degrees`
-  if (study.value === 'accessories') return `${vessel.name}, grey with ${shownAccessory.value ? `a ${ACCESSORIES.find(option => option.id === shownAccessory.value)!.name.toLowerCase()}` : 'no accessories'}${still.value ? '' : `, turned ${turn.value} degrees`}`
+  if (study.value === 'accessories') return `${vessel.name}, grey with ${shownAccessory.value ? `a ${shownAccessory.value === 'headphones' ? 'pair of headphones' : ACCESSORIES.find(option => option.id === shownAccessory.value)!.name.toLowerCase()}` : 'no accessories'}${still.value ? '' : `, turned ${turn.value} degrees`}`
   return `${vessel.name}, ${study.value === 'shapes' ? 'grey' : colour.value.name} with ${vessel.colors.eyes === '#1c1c1a' ? 'dark' : 'white'} eyes${vessel.lid || vessel.parts.some(part => part.id === 'lid') ? ' and a lid' : ' and a dark interior'}`
 }
 
@@ -286,7 +286,7 @@ onUnmounted(() => {
                 </label>
               </div>
             </fieldset>
-            <p class="palette-note">{{ accessoryId === 'paintbrush' ? 'Bristles out. The handle rests on the bottom and the right opening edge. The gaiwan lid rests against the brush.' : accessoryId === 'beret' ? 'A soft red beret, slouched to one side. The band rests on the rim, over the existing lid where present.' : accessoryId === 'tea-bag' ? 'A yellow tea tag on the left, clear of both eyes. The string flattens under lids, leaving only a tiny gap.' : accessoryId === 'scarf' ? 'A thick rich-blue scarf below the eyes, knotted at the side with tails falling toward the base. Near the handle the cloth rises or dips to pass it.' : 'Not modelled yet. Accessory previews are added one at a time.' }}</p>
+            <p class="palette-note">{{ accessoryId === 'paintbrush' ? 'Bristles out. The handle rests on the bottom and the right opening edge. The gaiwan lid rests against the brush.' : accessoryId === 'beret' ? 'A soft red beret, slouched to one side. The band rests on the rim, over the existing lid where present.' : accessoryId === 'tea-bag' ? 'A yellow tea tag on the left, clear of both eyes. The string flattens under lids, leaving only a tiny gap.' : accessoryId === 'headphones' ? 'Charcoal-grey headphones with large round ear cups seated flat on the wall and a thick arched band. Beside a handle, that ear cup slides forward off its ear. Subtle tones separate the shells, cushions and band.' : accessoryId === 'scarf' ? 'A thick rich-blue scarf below the eyes, knotted at the side with tails falling toward the base. Near the handle the cloth rises or dips to pass it.' : 'Not modelled yet. Accessory previews are added one at a time.' }}</p>
           </div>
         </div>
 

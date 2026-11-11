@@ -7,6 +7,7 @@ import * as accessories from './accessories'
 import * as berets from './beret'
 import * as teaTags from './tea-tag'
 import * as scarves from './scarf'
+import * as headphones from './headphones'
 
 vi.mock('three', async importOriginal => {
   const original = await importOriginal<typeof import('three')>()
@@ -191,11 +192,12 @@ describe('on-demand cup renderer', () => {
     expect(queue.size).toBe(0)
   })
 
-  it.each(['paintbrush', 'beret', 'tea-bag', 'scarf'] as const)('fits the %s only at construction, never while turning or changing elevation', accessory => {
+  it.each(['paintbrush', 'beret', 'tea-bag', 'scarf', 'headphones'] as const)('fits the %s only at construction, never while turning or changing elevation', accessory => {
     gallery.dispose()
     const fit = accessory === 'paintbrush' ? vi.spyOn(accessories, 'fitBrush')
       : accessory === 'beret' ? vi.spyOn(berets, 'fitBeret')
-        : accessory === 'tea-bag' ? vi.spyOn(teaTags, 'fitTeaTag') : vi.spyOn(scarves, 'fitScarf')
+        : accessory === 'tea-bag' ? vi.spyOn(teaTags, 'fitTeaTag')
+          : accessory === 'scarf' ? vi.spyOn(scarves, 'fitScarf') : vi.spyOn(headphones, 'fitHeadphones')
     const render = vi.spyOn(WebGLRenderer.prototype, 'render')
     const vessel = vessels.find(vessel => vessel.id === 'gaiwan')!
     const original = JSON.stringify(vessel)

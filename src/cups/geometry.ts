@@ -10,6 +10,7 @@ import { createBeret, fitBeret } from './beret'
 import { addEdgeTones } from './edge-tones'
 import { createTeaTag, fitTeaTag } from './tea-tag'
 import { createScarf, fitScarf } from './scarf'
+import { createHeadphones, fitHeadphones } from './headphones'
 import { bandLayout } from './pattern'
 
 export function radiusAtY(outline: Point2[], y: number): number {
@@ -156,6 +157,11 @@ export function createCup(definition: VesselDefinition, options: { pattern?: boo
   }
 
   const extraMaterials: MeshBasicMaterial[] = []
+  if (options.accessory === 'headphones') {
+    const headphones = createHeadphones(fitHeadphones(definition, root))
+    extraMaterials.push(...headphones.materials)
+    root.add(headphones.group)
+  }
   if (options.accessory === 'scarf') {
     const handle = root.getObjectByName('handle') as Mesh<TubeGeometry> | undefined
     const scarf = createScarf(fitScarf(definition, handle?.geometry))
