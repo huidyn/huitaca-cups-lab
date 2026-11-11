@@ -9,6 +9,7 @@ import { type AccessoryId, createPaintbrush, fitBrush, GAIWAN_LID_PARTS } from '
 import { createBeret, fitBeret } from './beret'
 import { addEdgeTones } from './edge-tones'
 import { createTeaTag, fitTeaTag } from './tea-tag'
+import { createScarf, fitScarf } from './scarf'
 import { bandLayout } from './pattern'
 
 export function radiusAtY(outline: Point2[], y: number): number {
@@ -155,6 +156,12 @@ export function createCup(definition: VesselDefinition, options: { pattern?: boo
   }
 
   const extraMaterials: MeshBasicMaterial[] = []
+  if (options.accessory === 'scarf') {
+    const handle = root.getObjectByName('handle') as Mesh<TubeGeometry> | undefined
+    const scarf = createScarf(fitScarf(definition, handle?.geometry))
+    extraMaterials.push(...scarf.materials)
+    root.add(scarf.group)
+  }
   if (options.accessory === 'tea-bag') {
     const fit = fitTeaTag(definition)
     const tea = createTeaTag(fit)

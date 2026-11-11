@@ -1,5 +1,85 @@
 # Huitaca Cups lab
 
+## Scarf: thick knotted cloth below the eyes
+
+- Alessandro requested the reference's wrapped scarf, in a rich blue not
+  present in the cup palette. Cloth uses cobalt `#244bd2`; the back tail
+  uses a darker `#1837a4`. Existing baked edge tones shade the folds without
+  lights, shadows or a texture.
+- First attempt rejected: a 0.13-unit band with a 0.28-unit stub read as
+  "a rope", neither thick nor long enough. The rebuild follows the
+  reference's proportions: a wrap 0.15 to 0.32 units tall (about 55% of
+  the space between the eyes and the body floor, 80% of that on cultural
+  cups), a raised knot at the right front, and two tails.
+- Cloth is deliberately imperfect, using fixed values that never change:
+  the top and bottom edges wave, the thickness varies around the cup,
+  two creases drift across the wrap's face, the knot pulls the cloth down,
+  the knot is a lumpy pillow with a diagonal fold, and the tails widen,
+  fold, sway slightly and end in a slanted hem. Two builds are identical.
+- The wrap stays below the lowest eye position across the full gaze range.
+  The main tail hangs straight down in front of the wrap, resting on any
+  wall that widens. Its lowest tip ends about 0.032 units above the actual
+  base or saucer; the goblet keeps extra stem clearance and the Russian
+  glass's tail is capped at 0.75 units.
+- Pattern coverage rose with the thickness: the scarf now covers 35% to
+  48% of each cultural pattern band, down to 6% on the Russian holder.
+  The earlier 75%-uncovered target was dropped for a thicker scarf; tests
+  keep more than half of each band uncovered at both 64 and 128 samples.
+- Handle side: the band rises or dips locally, and can narrow, to pass
+  between the handle's joints. The fit picks the smallest change that clears
+  the real flared handle mesh, and it prefers moving the band to pinching
+  it. The mugs rise through the handle loop; the teacup, small cup and round
+  mug dip under the lower joint. Triangle-edge tests check cloth against
+  handles in both directions. No cup or lid moves.
+- Teacup correction: the tails hit saucer height and spread out to the
+  saucer's edge, and the handle-side dip reached the saucer. The fit now
+  treats the highest ledge under the scarf (the teacup's and çay glass's
+  saucers) as the floor. Tails stop above it and never reach
+  further out than the knot; the band can't dip below it. Low cups get a
+  0.2-unit minimum band.
+- Handle-side upgrade (Alessandro's review): the teacup, small cup and round
+  mug used to dip under the handle's lower joint, and every handled cup
+  rose in an abrupt local bump. Now the cloth always passes above the lower
+  joint, through the handle loop. It rises gradually from just right of the
+  right eye up to the handle (about 1 radian of turn), stays high around the
+  back, and drops slowly down the left side, so the scarf sits higher on the
+  handle side. The front under the eyes doesn't move. The handle-side lift is
+  0.215 units on the mug, 0.25 on the tall mug, 0.315 on the teacup, 0.38 on
+  the small cup, 0.415 on the round mug, 0.24 on the Colombian mug and 0.08
+  on the Russian glass, with no narrowing on any cup.
+- Knot correction: once the band sloped up toward the handle, the knot
+  stayed level and slid below the band, so the tails seemed to come out from
+  under the scarf (teacup, round mug). The knot now follows the band's slope.
+  Both tails start just below the middle of the knot: the main tail on its
+  handle side, the darker one toward the front. The knot is slightly wider and
+  thicker. This was checked with an offline geometry render, not the browser.
+- Final horizontal correction: Alessandro confirmed the main (right-hand)
+  tail at `KNOT_ANGLE - 0.01`, replacing the original `+0.03` offset.
+  Its height, length, width and drift, the darker tail and the wrap remain
+  unchanged. The attachment test locks this confirmed position.
+- Tail-length review: the footed bowl and round bowl used the bowl bottom
+  instead of the lower foot, leaving gaps of 0.172 and 0.142 units. Tails
+  now target the actual base or the top of a separate saucer. The main tail
+  uses a fixed small hem clearance instead of leaving a percentage of its
+  available fall unused; the back tail grows from 72% to up to 85% of the
+  main tail, with its own floor limit. On teacup, footed bowl, round bowl,
+  rimmed cup, rounded tumbler and gaiwan, main tips sit about 0.032 units
+  above the base/saucer and back tips 0.040 to 0.053 above it. Six regression
+  tests check both tails against the actual vessel outlines. The wrap,
+  knot and approved horizontal attachment remain unchanged. Alessandro
+  approved the longer tails for the scarf commit.
+- Goblet: when the body sits on a stem at least 0.3 units tall, the tail
+  may fall past the bowl, alongside the stem, to 0.1 units above the table.
+  The goblet's tail went from 0.28 to 0.66 units long.
+- Where the wall steps (the Russian holder's lip, rounded bases), the cloth
+  bridges the step rather than following it between vertex rows, so no flat
+  face cuts into the cup.
+- Fitting is cached at construction; nothing refits while turning or
+  changing elevation. Meshes and materials use the existing disposal path.
+- Alessandro confirmed the final tail position. No browser preview, screenshots or stills.
+- Validation: 861 tests across 25 files pass, including 154 scarf tests.
+  Strict `vue-tsc` and the Vite production build pass, with only the existing
+  warning that the lazy renderer chunk is over 500 kB.
 ## Tea tag: frozen hanging and contact fit
 
 - The existing Tea bag choice now reads Tea tag. It adds the reference's
@@ -101,7 +181,7 @@
   narrow band and small top stem. No badge, star, insignia or fabric texture.
   The intended reading is creative/artistic, not a uniform. Red cannot be
   claimed to have no political or military associations in every context.
-  The scarf is planned in blue but remains unmodelled.
+  At that checkpoint, the scarf was planned in blue but remained unmodelled.
 - The crown and stem use flat red `#c84444`; the band is deeper red `#a93636`.
   The band stays horizontal, while the crown spreads and falls to the left.
   All three meshes are unlit and cast no shadows.
