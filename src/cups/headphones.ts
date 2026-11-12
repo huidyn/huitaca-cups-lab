@@ -9,12 +9,35 @@ export const HEADPHONE_COLORS = { band: '#555958', shell: '#626665', cushion: '#
 // Proportions relevées sur la référence : coque ronde d'environ la moitié du
 // diamètre de la tasse, coussin épais, arceau franc.
 const CUSHION_DEPTH = 0.09
-const SHELL_DEPTH = 0.2
+const SHELL_DEPTH = 0.27
 const SHELL_OVERLAP = 0.01
 const BAND_THICKNESS = 0.075
 const BAND_DEPTH = 0.08
 const CLEARANCE = 0.008
 const SLICES = 16
+const FOAM_REACH = 0.1
+const FOAM_FILL = 0.85
+// Coussin de tête sous le sommet de l'arceau : c'est lui, plus que l'épaisseur
+// de l'arceau, qui fait lire « casque » quand la tasse ne fait que 48 px.
+const PAD_FROM = 0.3 * Math.PI
+const PAD_TO = 0.7 * Math.PI
+const PAD_THICKNESS = 0.12
+const PAD_DEPTH = 0.12
+const PAD_SHIFT = 0.018
+
+// Section du coussin à l'angle t de l'ellipse, ou null hors du coussin. Les
+// bouts en super-ellipse s'arrondissent et rentrent dans l'arceau, sans face plate.
+function padSection(t: number) {
+  if (t <= PAD_FROM || t >= PAD_TO) return null
+  const s = (t - PAD_FROM) / (PAD_TO - PAD_FROM) * 2 - 1
+  const bump = Math.pow(1 - Math.pow(Math.abs(s), 6), 1 / 4)
+  const inside = 0.9
+  return {
+    across: BAND_THICKNESS * inside + (PAD_THICKNESS - BAND_THICKNESS * inside) * bump,
+    depth: BAND_DEPTH * inside + (PAD_DEPTH - BAND_DEPTH * inside) * bump,
+    shift: PAD_SHIFT * bump
+  }
+}
 
 export interface HeadphoneFit {
   radius: number
@@ -164,12 +187,17 @@ export function fitHeadphones(vessel: VesselDefinition, cup: Group): HeadphoneFi
   if (!rim.length) throw new Error(`${vessel.id}: headphones need a rim`)
   const rimY = Math.max(...rim.map(point => point[1]))
   const rimRadius = Math.max(...rim.map(point => point[0]))
+  // Un couvercle rapporté (gobelet à emporter) déborde de la paroi : posée
+  // contre lui, l'oreille ne touchait que son rebord et flottait sur le corps.
+  // Elle descend donc sous le couvercle, contre la vraie paroi.
+  const lidParts = vessel.lid ? vessel.parts.filter(part => part.id.startsWith('lid')).flatMap(part => part.outline) : []
+  const earTop = lidParts.length ? Math.min(...lidParts.map(point => point[1])) : rimY
   const surfaces: Mesh[] = []
   cup.traverse(object => { if (object instanceof Mesh && object.name !== 'handle') surfaces.push(object) })
   // Au-delà de cette avance, l'oreille déplacée masquerait l'œil vu de trois
   // quarts : sur une anse très haute, la coque rapetisse un peu plutôt.
-  let ear = placeEar(cup, surfaces, rimY, Math.min(0.46, Math.max(0.38, rimRadius * 0.52)))
-  while (ear.tilt > 0.635 && ear.earRadius > 0.3) ear = placeEar(cup, surfaces, rimY, ear.earRadius - 0.01)
+  let ear = placeEar(cup, surfaces, earTop, Math.min(0.46, Math.max(0.38, rimRadius * 0.52)))
+  while (ear.tilt > 0.635 && ear.earRadius > 0.3) ear = placeEar(cup, surfaces, earTop, ear.earRadius - 0.01)
   const { earY, earRadius, radius, lean, tilt } = ear
   const frame = earFrame(ear, 1)
   frame.updateMatrixWorld(true)
@@ -181,7 +209,10 @@ export function fitHeadphones(vessel: VesselDefinition, cup: Group): HeadphoneFi
     // Une mousse souple, pas un moulage : déformation douce et limitée, sans
     // chercher à remplir tous les jours entre l'anneau et la tasse.
     const x = points.getX(i)
-    const compression = 0.012 * Math.tanh(wall / 0.025)
+    // Les petits jours se referment presque (FOAM_FILL), les grands plafonnent à
+    // FOAM_REACH : sur une paroi galbée (tasse à thé, verre à çay), la mousse
+    // rejoint la tasse au lieu de laisser un trou visible de face.
+    const compression = FOAM_FILL * FOAM_REACH * Math.tanh(wall / FOAM_REACH)
     points.setX(i, x + compression * (1 - x / CUSHION_DEPTH))
   }
   const cushionPositions = Array.from(points.array)
@@ -221,12 +252,16 @@ export function fitHeadphones(vessel: VesselDefinition, cup: Group): HeadphoneFi
       const nx = rise * Math.cos(t)
       const ny = span * Math.sin(t)
       const normalX = nx / Math.hypot(nx, ny)
+      // Sous le sommet, c'est le coussin, plus épais et décalé vers le bas, qui doit passer.
+      const pad = padSection(t)
+      const under = pad ? pad.shift + pad.across : BAND_THICKNESS
+      const wide = pad ? pad.depth : BAND_DEPTH
       for (const across of [-1, 0, 1]) {
         for (const depth of [-1, 0, 1]) {
-          const [x, z] = bandPoint(band, span * Math.cos(t) + across * BAND_THICKNESS * normalX, depth * BAND_DEPTH)
+          const [x, z] = bandPoint(band, span * Math.cos(t) + across * under * normalX, depth * wide)
           ray.ray.origin.set(x, highest + 1, z)
           const hit = ray.intersectObjects(surfaces, false)[0]
-          if (hit) needed = Math.max(needed, (hit.point.y + 0.025 + BAND_THICKNESS - legTop) / Math.sin(t))
+          if (hit) needed = Math.max(needed, (hit.point.y + 0.025 + under - legTop) / Math.sin(t))
         }
       }
     }
@@ -303,14 +338,34 @@ function bandGeometry(fit: HeadphoneFit) {
     path.push({ x: fit.span * Math.cos(t), y: fit.legTop + fit.rise * Math.sin(t), nx: nx / length, ny: ny / length })
   }
   for (let i = legs - 1; i >= 0; i--) path.push({ x: -fit.footSpan - i / legs * (fit.span - fit.footSpan), y: fit.bandY + i / legs * (fit.legTop - fit.bandY), nx: -1, ny: 0 })
+  return tube(fit, path.map(point => ({ ...point, across: BAND_THICKNESS, depth: BAND_DEPTH, shift: 0 })))
+}
+
+// Coussin de tête : même ellipse que l'arceau, section variable.
+function padGeometry(fit: HeadphoneFit) {
+  const path: Section[] = []
+  for (let i = 0; i <= 48; i++) {
+    const t = PAD_FROM + (i + 0.5) / 49 * (PAD_TO - PAD_FROM)
+    const nx = fit.rise * Math.cos(t)
+    const ny = fit.span * Math.sin(t)
+    const length = Math.hypot(nx, ny)
+    path.push({ x: fit.span * Math.cos(t), y: fit.legTop + fit.rise * Math.sin(t), nx: nx / length, ny: ny / length, ...padSection(t)! })
+  }
+  return tube(fit, path)
+}
+
+interface Section { x: number, y: number, nx: number, ny: number, across: number, depth: number, shift: number }
+
+// Tube elliptique le long d'un chemin du plan de l'arceau, bouts fermés.
+function tube(fit: HeadphoneFit, path: Section[]) {
   const sides = 16
   const vertices: number[] = []
   const indices: number[] = []
   path.forEach((point, segment) => {
     for (let side = 0; side <= sides; side++) {
       const a = side / sides * Math.PI * 2
-      const offset = BAND_THICKNESS * Math.cos(a)
-      const [x, z] = bandPoint(fit, point.x + offset * point.nx, BAND_DEPTH * Math.sin(a))
+      const offset = point.across * Math.cos(a) - point.shift
+      const [x, z] = bandPoint(fit, point.x + offset * point.nx, point.depth * Math.sin(a))
       vertices.push(x, point.y + offset * point.ny, z)
       if (segment === path.length - 1 || side === sides) continue
       const i = segment * (sides + 1) + side
@@ -338,6 +393,9 @@ export function createHeadphones(fit: HeadphoneFit) {
   group.name = 'headphones'
   const band = new Mesh(bandGeometry(fit), materials.band)
   band.name = 'headphones-band'
+  const pad = new Mesh(padGeometry(fit), materials.cushion)
+  pad.name = 'headphones-band-pad'
+  band.add(pad)
   group.add(band)
   for (const side of [-1, 1]) {
     const name = side < 0 ? 'left' : 'right'

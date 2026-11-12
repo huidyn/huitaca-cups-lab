@@ -59,8 +59,11 @@ describe('charcoal-grey headphones', () => {
         const band = new Box3().setFromObject(model.getObjectByName('headphones-band')!)
         const left = new Box3().setFromObject(model.getObjectByName('headphones-left')!)
         expect(band.max.y - left.max.y).toBeGreaterThan(0.25)
-        // Le haut des coques arrive presque au bord, comme sur la référence.
-        const rimY = Math.max(...vessel.parts.filter(part => part.id === 'rim' || (vessel.lid && part.id === 'lid')).flatMap(part => part.outline).map(point => point[1]))
+        // Le haut des coques arrive presque au bord, comme sur la référence ; sous
+        // un couvercle rapporté, au bas du couvercle, contre la paroi.
+        const rimY = vessel.lid
+          ? Math.min(...vessel.parts.filter(part => part.id.startsWith('lid')).flatMap(part => part.outline).map(point => point[1]))
+          : Math.max(...vessel.parts.filter(part => part.id === 'rim').flatMap(part => part.outline).map(point => point[1]))
         expect(left.max.y).toBeGreaterThan(rimY - 0.12)
         expect(left.max.y).toBeLessThan(rimY + 0.08)
         model.traverse(object => {
@@ -130,7 +133,7 @@ describe('charcoal-grey headphones', () => {
             const r = Math.hypot(points.getY(i), points.getZ(i))
             expect(r).toBeGreaterThan(fit.earRadius * 0.52 - 1e-6)
             expect(r).toBeLessThan(fit.earRadius * 0.9 + 1e-6)
-            expect(points.getX(i)).toBeGreaterThan(-0.012001)
+            expect(points.getX(i)).toBeGreaterThan(-0.085001)
             expect(points.getX(i)).toBeLessThan(0.090001)
           }
           // Rayons sur le maillage seul : trou au centre, mousse à la périphérie.
