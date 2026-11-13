@@ -399,7 +399,7 @@ onUnmounted(() => {
           <p class="study-description">{{ STUDIES[study].description }}</p>
         </div>
 
-        <AgentSidebar v-if="study === 'sidebar'" />
+        <AgentSidebar v-if="study === 'sidebar'" :theme="theme" />
         <div v-else :class="{ 'colour-workspace': single, 'cup-picker-workspace': hasCupPicker, 'editor-workspace': editing || emotive }">
           <label v-if="hasCupPicker" class="culture-control cup-control">Cup
             <select v-model="cupId" aria-label="Cup">

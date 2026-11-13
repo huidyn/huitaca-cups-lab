@@ -1,5 +1,7 @@
 import { editorLook, PLAIN } from './editor'
 import { toEditorChoice, defaultAgentLook } from './agent-look'
+import { createPerformer } from './personality'
+import { PERSONALITY_IDS } from './agent-look'
 import { judge, type QualityId, type Sample, summarise, type Summary, type Verdict } from './quality'
 import type { CupView } from './renderer'
 
@@ -8,17 +10,20 @@ import type { CupView } from './renderer'
 // visible depuis la page (voir le panneau Performance des outils de développement).
 
 export interface Scenario {
-  id: 'hero' | 'sidebar'
+  id: 'hero' | 'sidebar' | 'thinking'
   label: string
   cups: number
   // Côté de chaque tasse, en pixels CSS.
   size: number
   // Comme la barre latérale : les tasses au repos ne sont pas dessinées, seule celle sous le curseur vit.
   resting?: boolean
+  // Agents qui réfléchissent en même temps (vivants, avec vapeur), en plus de celui survolé.
+  thinking?: number
 }
 export const SCENARIOS: Scenario[] = [
   { id: 'hero', label: 'One large cup', cups: 1, size: 320 },
-  { id: 'sidebar', label: 'Sidebar, 10 agents, hovered one live', cups: 10, size: 32, resting: true }
+  { id: 'sidebar', label: 'Sidebar, 10 agents, hovered one live', cups: 10, size: 32, resting: true },
+  { id: 'thinking', label: 'Sidebar, 3 thinking and one hovered', cups: 10, size: 32, resting: true, thinking: 3 }
 ]
 // Ralentissement simulé du processeur : l'image attend (k - 1) fois son propre coût.
 export const SLOWDOWNS = [1, 2, 4, 6]
@@ -82,14 +87,22 @@ export async function runScenario(scenario: Scenario, options: BenchOptions): Pr
   }
   document.body.append(host)
 
+  // Un interprète par agent qui réfléchit, chacun avec sa graine et sa personnalité.
+  const performers = Array.from({ length: scenario.thinking ?? 0 }, (_, i) => {
+    const performer = createPerformer(i + 1)
+    performer.setPersonality(PERSONALITY_IDS[i % PERSONALITY_IDS.length]!)
+    performer.setThinking(true)
+    return performer
+  })
   let samples: Sample[] = []
-  let recording = true
+  let recording = false
   let idleFrames = 0
   let counting = false
   const gallery = createCupGallery(canvas, views, {
     quality: options.quality,
     frame: DEFAULT_FRAME,
     resting: scenario.resting ? { x: 0.6, y: 0 } : undefined,
+    act: performers.length ? (index, dt, pointer) => performers[index % performers.length]!.step(dt, pointer) : undefined,
     onFrame: sample => {
       // Le ralentissement simulé s'ajoute au coût mesuré, et il fait réellement attendre l'image.
       if (options.slowdown > 1) {
@@ -101,6 +114,11 @@ export async function runScenario(scenario: Scenario, options: BenchOptions): Pr
     }
   })
   try {
+    // Comme la page : les images de repos sont prises d'abord, donc chaque tasse a déjà été dessinée
+    // une fois (formes et motifs envoyés au GPU) avant qu'on ne mesure quoi que ce soit.
+    if (scenario.resting) await gallery.snapshot(views.map((_, i) => i), scenario.size)
+    performers.forEach((_, i) => gallery.setActing(i, true))
+    recording = true
     // Un curseur qui se promène autour des tasses, comme une vraie main.
     const box = host.getBoundingClientRect()
     const cx = box.left + box.width / 2
@@ -129,6 +147,12 @@ export async function runScenario(scenario: Scenario, options: BenchOptions): Pr
       }
       move()
     })
+    // Plus personne ne réfléchit ni n'est survolé : tout doit revenir à l'image, puis au silence.
+    performers.forEach((performer, i) => {
+      performer.setThinking(false)
+      gallery.setActing(i, false)
+    })
+    if (hovered !== undefined) gallery.rest(hovered)
     await wait(SETTLE_MS)
     recording = false
     counting = true

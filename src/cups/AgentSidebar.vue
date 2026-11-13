@@ -5,7 +5,9 @@ import {
 } from './agent-look'
 import { AVATAR_FRAME, flatCup } from './cup2d'
 import { editorLook } from './editor'
-import { createGovernor, QUALITY, type QualityId } from './quality'
+import { createGovernor, LIVE_SLOTS, lowerTier, QUALITY, type QualityId, suggestTier } from './quality'
+import { createPerformer, type Performer } from './personality'
+import { STEAM } from './steam'
 import { type BenchResult, deviceInfo, gpuName, runScenario, SCENARIOS, SLOWDOWNS } from './bench'
 import type { createCupGallery } from './renderer'
 import './agents.css'
@@ -14,6 +16,48 @@ import './agents.css'
 const REST = { x: 0.6, y: 0 }
 // Images de repos déjà faites, pour toute la session (une page qui revient ne les refait pas).
 const STILLS: Record<string, string> = {}
+// Images prises par lot, en rendant la main entre deux : 40 agents ne bloquent pas la page.
+const STILL_BATCH = 8
+// Le niveau où le juge s'est arrêté, retenu d'une visite à l'autre : on ne refait pas la descente.
+const TIER_KEY = 'cups.quality'
+type Tier = Exclude<QualityId, 'static'>
+function rememberedTier(): Tier | undefined {
+  try {
+    const value = localStorage.getItem(TIER_KEY)
+    return value === 'high' || value === 'balanced' || value === 'low' ? value : undefined
+  } catch {
+    return undefined
+  }
+}
+function rememberTier(value: Tier) {
+  try {
+    localStorage.setItem(TIER_KEY, value)
+  } catch { /* stockage refusé : on redescendra à la prochaine visite */ }
+}
+// Une graine par agent, tirée de son identifiant : deux agents ne jouent jamais la même partition.
+function seedOf(id: string) {
+  let hash = 2166136261
+  for (let i = 0; i < id.length; i++) hash = Math.imul(hash ^ id.charCodeAt(i), 16777619)
+  return hash >>> 0
+}
+
+// Qui réfléchit : des cas d'usage plutôt qu'un nombre. Les agents du haut sont les plus récents,
+// donc les plus souvent actifs ; « heavy » en garde un tout en bas, rare mais possible.
+type Activity = 'none' | 'light' | 'heavy' | 'all'
+const ACTIVITIES: { id: Activity; label: string }[] = [
+  { id: 'none', label: 'Nobody' },
+  { id: 'light', label: 'Light' },
+  { id: 'heavy', label: 'Heavy' },
+  { id: 'all', label: 'Everybody' }
+]
+function thinkingRows(activity: Activity, total: number): number[] {
+  if (activity === 'none') return []
+  if (activity === 'light') return [0]
+  if (activity === 'all') return Array.from({ length: total }, (_, i) => i)
+  return [...new Set([0, 1, 3, 4, 7, total - 4])].filter(i => i >= 0 && i < total)
+}
+
+const props = withDefaults(defineProps<{ theme?: 'light' | 'dark' }>(), { theme: 'light' })
 
 // Des agents d'exemple : ce que l'app a enregistré pour chacun, et son nom. Le reste de la liste
 // vient de `defaultAgentLook`, comme pour un agent qui n'a encore rien choisi.
@@ -29,15 +73,16 @@ const ROSTER: { id: string; name: string; look: unknown }[] = [
   { id: 'drafts', name: 'Drafts', look: { v: 1, cup: 'gaiwan', design: 'yunwen', accessories: [], personality: 'calm' } },
   { id: 'translator', name: 'Translator', look: { v: 1, cup: 'small-cup', colour: 'teal', accessories: ['leaf'], personality: 'playful' } }
 ]
-const COUNTS = [5, 10, 20, 40]
+const COUNTS = [10, 20, 40]
 const SIZES = [24, 28, 32]
 const TIERS: Exclude<QualityId, 'static'>[] = ['high', 'balanced', 'low']
 
 const size = ref(32)
-const count = ref(10)
+const count = ref(40)
+const activity = ref<Activity>('light')
 const collapsed = ref(false)
 const selected = ref(ROSTER[0]!.id)
-const tier = ref<Exclude<QualityId, 'static'>>('high')
+const tier = ref<Tier>('high')
 const adaptive = ref(true)
 const notice = ref('')
 const reduced = ref(false)
@@ -62,8 +107,67 @@ const density = computed(() => Math.min(window.devicePixelRatio || 1, QUALITY[ti
 const stills = ref<Record<string, string>>({ ...STILLS })
 const stillKey = (row: { key: string }) => `${row.key}|${size.value}|${density.value}`
 const still = (row: { key: string }) => flat.value ? undefined : stills.value[stillKey(row)]
-// Les rangées dont la tasse est dessinée en 3D en ce moment (survolée, ou qui revient au repos).
+// Les rangées dont la tasse est dessinée en 3D en ce moment (survolée, qui réfléchit, ou qui revient au repos).
 const live = ref(new Set<number>())
+const hovered = ref<number>()
+// Rangées visibles dans la liste : une tasse hors de vue ne prend pas de place vivante.
+const range = ref({ first: 0, last: 12 })
+const thinking = computed(() => new Set(thinkingRows(activity.value, rows.value.length)))
+// Places vivantes pour ceux qui réfléchissent, selon le niveau ; aucune sans 3D ou sans mouvement.
+const slots = computed(() => flat.value || reduced.value ? 0 : LIVE_SLOTS[tier.value])
+// Ceux qui réfléchissent en 3D : les premiers visibles depuis le haut, dans la limite des places,
+// plus celui qu'on survole s'il réfléchit. Les autres gardent leur image, avec la vapeur dessinée.
+const actors = computed(() => {
+  const chosen = new Set<number>()
+  if (flat.value || reduced.value) return chosen
+  for (const index of thinking.value) {
+    if (chosen.size >= slots.value) break
+    if (index < range.value.first || index > range.value.last || !still(rows.value[index]!)) continue
+    chosen.add(index)
+  }
+  const over = hovered.value
+  if (over !== undefined && thinking.value.has(over) && still(rows.value[over]!)) chosen.add(over)
+  return chosen
+})
+// Un interprète par agent, créé à la demande, avec sa personnalité et sa propre graine.
+const performers = new Map<string, Performer>()
+function performerOf(index: number) {
+  const row = rows.value[index]!
+  let performer = performers.get(row.id)
+  if (!performer) {
+    performer = createPerformer(seedOf(row.id))
+    performer.setPersonality(row.look.personality)
+    performers.set(row.id, performer)
+  }
+  return performer
+}
+// Ce que le rendu joue en ce moment, pour ne lui dire que les changements.
+let acting = new Set<number>()
+function cast() {
+  if (!gallery) return
+  const next = actors.value
+  for (const index of acting) {
+    if (next.has(index) || index >= rows.value.length) continue
+    performerOf(index).setThinking(false)
+    gallery.setActing(index, false)
+  }
+  for (const index of next) {
+    if (acting.has(index)) continue
+    performerOf(index).setThinking(true)
+    gallery.setActing(index, true)
+  }
+  acting = new Set(next)
+}
+// Décalage de la vapeur dessinée, propre à chaque rangée : jamais deux volutes au même instant.
+const phase = (index: number) => ((index * 0.618) % 1 * 3).toFixed(2)
+function measureRange() {
+  const list = scroller.value
+  const row = size.value + 12
+  if (!list || !list.clientHeight) return
+  const first = Math.floor(list.scrollTop / row)
+  const last = Math.ceil((list.scrollTop + list.clientHeight) / row) - 1
+  if (first !== range.value.first || last !== range.value.last) range.value = { first, last }
+}
 
 const canvas = ref<HTMLCanvasElement>()
 const scroller = ref<HTMLElement>()
@@ -72,13 +176,15 @@ let governor = createGovernor()
 let disposed = false
 let media: MediaQueryList
 let observer: MutationObserver | undefined
-let hovered: number | undefined
 
 async function start() {
   gallery?.dispose()
   gallery = undefined
   frames.value = 0
   live.value = new Set()
+  acting = new Set()
+  hovered.value = undefined
+  for (const performer of performers.values()) performer.setThinking(false)
   if (flat.value) return
   await nextTick()
   try {
@@ -91,6 +197,8 @@ async function start() {
       frame: AVATAR_FRAME,
       quality: tier.value,
       resting: REST,
+      steamColor: STEAM.colors[props.theme],
+      act: (index, dt, pointer) => performerOf(index).step(dt, pointer),
       onShown: indices => { live.value = new Set(indices) },
       onFrame: sample => {
         if (!adaptive.value) return
@@ -106,6 +214,8 @@ async function start() {
         }
       }
     })
+    measureRange()
+    cast()
     await photograph()
   } catch {
     fallback.value = true
@@ -117,17 +227,24 @@ async function photograph() {
   const target = gallery
   if (!target) return
   const missing = rows.value.flatMap((row, i) => stills.value[stillKey(row)] ? [] : [i])
-  if (!missing.length) return
-  const keys = missing.map(i => stillKey(rows.value[i]!))
-  const urls = await target.snapshot(missing, size.value)
-  if (target !== gallery) return
-  const next = { ...stills.value }
-  urls.forEach((url, i) => {
-    if (!url) return
-    next[keys[i]!] = url
-    STILLS[keys[i]!] = url
-  })
-  stills.value = next
+  // Du haut vers le bas, par lots : les rangées visibles ont leur image d'abord.
+  for (let from = 0; from < missing.length; from += STILL_BATCH) {
+    const batch = missing.slice(from, from + STILL_BATCH)
+    const asked = size.value
+    const keys = batch.map(i => stillKey(rows.value[i]!))
+    const urls = await target.snapshot(batch, asked)
+    // La taille ou le niveau a changé entre-temps : un autre passage est déjà parti.
+    if (target !== gallery || asked !== size.value) return
+    const next = { ...stills.value }
+    urls.forEach((url, i) => {
+      if (!url) return
+      next[keys[i]!] = url
+      STILLS[keys[i]!] = url
+    })
+    stills.value = next
+    await new Promise<void>(resolve => setTimeout(resolve, 0))
+    if (target !== gallery) return
+  }
 }
 
 // La 3D se prépare quand la page n'a rien d'autre à faire : la première image n'attend pas three.
@@ -141,11 +258,16 @@ watch([count, flat], () => { void start() })
 watch(tier, value => {
   governor = createGovernor({ start: value })
   gallery?.setQuality(value)
+  rememberTier(value)
   void photograph()
 })
+// La distribution change (cas d'usage, défilement, survol, images prêtes, niveau) : on la donne au rendu.
+watch(actors, cast)
+watch(() => props.theme, value => gallery?.setSteamColor(STEAM.colors[value]))
 // Le panneau replié change la place des tasses sans changer leur taille : on redessine.
 watch([collapsed, size], async () => {
   await nextTick()
+  measureRange()
   gallery?.refresh()
   void photograph()
 })
@@ -154,20 +276,24 @@ watch([collapsed, size], async () => {
 // pour que le passage de l'image à la 3D tombe sur la même tasse, au même regard.
 function enter(event: PointerEvent, index: number) {
   if (event.pointerType === 'touch' || reduced.value || !gallery || !still(rows.value[index]!)) return
-  if (hovered !== undefined && hovered !== index) gallery.rest(hovered)
-  hovered = index
+  if (hovered.value !== undefined && hovered.value !== index) gallery.rest(hovered.value)
+  hovered.value = index
   gallery.wake(index)
 }
 function exit(index: number) {
-  if (hovered === index) hovered = undefined
+  if (hovered.value === index) hovered.value = undefined
   gallery?.rest(index)
 }
-// La liste défile sous un canevas fixe : la tasse vivante doit suivre sa rangée.
-const scrolled = () => gallery?.refresh()
+// La liste défile sous un canevas fixe : les tasses vivantes doivent suivre leur rangée,
+// et les places vivantes vont à ceux qu'on voit.
+function scrolled() {
+  measureRange()
+  gallery?.refresh()
+}
 
 function syncMotion() {
   reduced.value = media.matches
-  if (reduced.value && hovered !== undefined) exit(hovered)
+  if (reduced.value && hovered.value !== undefined) exit(hovered.value)
 }
 
 // Mesures
@@ -203,6 +329,12 @@ onMounted(() => {
     observer = new MutationObserver(() => { frames.value = Number(canvas.value?.dataset.frames ?? 0) })
     observer.observe(canvas.value, { attributes: true, attributeFilter: ['data-frames'] })
   }
+  // Indice de départ : ce que l'appareil dit de lui-même, sans dépasser le niveau retenu la dernière fois.
+  const nav = navigator as Navigator & { deviceMemory?: number; connection?: { saveData?: boolean } }
+  const hint = suggestTier({ cores: nav.hardwareConcurrency, memoryGb: nav.deviceMemory, saveData: nav.connection?.saveData })
+  const remembered = rememberedTier()
+  tier.value = remembered ? lowerTier(hint, remembered) : hint
+  measureRange()
   soon(() => { void start() })
 })
 onUnmounted(() => {
@@ -242,7 +374,13 @@ onUnmounted(() => {
                 <span class="agent-cup" :class="{ 'is-live': live.has(index) }" aria-hidden="true">
                   <span v-if="!flat" class="agent-viewport" />
                   <img v-if="still(row)" class="agent-still" :src="still(row)" alt="" draggable="false" />
-                  <svg v-else class="flat-cup" :viewBox="row.flat.box.join(' ')" :style="{ '--gx': REST.x, '--gy': REST.y }" focusable="false">
+                  <!-- Il réfléchit sans place vivante : la vapeur est dessinée par-dessus son image. -->
+                  <svg v-if="thinking.has(index) && !actors.has(index)" class="agent-steam" viewBox="0 0 32 32" :style="{ '--phase': phase(index) }" focusable="false">
+                    <path d="M11 12c-2-2.4 2-3.6 0-6s2-3.2 0.4-5" />
+                    <path d="M16 11c2-2.6-2-3.8 0-6.4s-1.6-3 0-4.4" />
+                    <path d="M21 12c-1.8-2.2 1.8-3.4 0-5.6s1.8-3 0.2-4.8" />
+                  </svg>
+                  <svg v-if="!still(row)" class="flat-cup" :viewBox="row.flat.box.join(' ')" :style="{ '--gx': REST.x, '--gy': REST.y }" focusable="false">
                     <path v-for="(shape, i) in row.flat.shapes" :key="i" :d="shape.d" :fill="shape.fill" :stroke="shape.stroke" :stroke-width="shape.width" stroke-linejoin="round" />
                     <g class="flat-eyes">
                       <rect v-for="(eye, i) in row.flat.eyes" :key="i" :x="eye.x" :y="eye.y" :width="eye.width" :height="eye.height" :rx="eye.width / 2" :fill="eye.fill" />
@@ -259,7 +397,7 @@ onUnmounted(() => {
           <div class="side-account"><span class="sk sk-avatar" /><span v-if="!collapsed" class="side-org-text"><span class="sk sk-line" style="width: 88px" /><span class="sk sk-line sk-small" style="width: 120px" /></span></div>
         </div>
       </aside>
-      <p class="agents-caption">{{ flat ? 'Static cups · SVG, no canvas' : `Still images at rest · live 3D on hover · ${frames} frames drawn` }}</p>
+      <p class="agents-caption">{{ flat ? 'Static cups · SVG, no canvas' : `${live.size} live in 3D of ${count} · ${thinking.size} thinking · ${frames} frames drawn` }}</p>
     </div>
 
     <div class="agents-panel">
@@ -269,6 +407,10 @@ onUnmounted(() => {
           <div class="agents-control" role="group" aria-label="Cup size">
             <span>Cup</span>
             <div class="segment"><button v-for="value in SIZES" :key="value" type="button" :aria-pressed="size === value" @click="size = value">{{ value }} px</button></div>
+          </div>
+          <div class="agents-control" role="group" aria-label="Activity">
+            <span>Thinking</span>
+            <div class="segment"><button v-for="option in ACTIVITIES" :key="option.id" type="button" :aria-pressed="activity === option.id" @click="activity = option.id">{{ option.label }}</button></div>
           </div>
           <div class="agents-control" role="group" aria-label="Agents">
             <span>Agents</span>
@@ -286,7 +428,8 @@ onUnmounted(() => {
             <div class="segment"><button v-for="id in TIERS" :key="id" type="button" :aria-pressed="tier === id" :disabled="flat" @click="tier = id; notice = ''">{{ QUALITY[id].label }}</button></div>
           </div>
           <label class="agents-check"><input v-model="adaptive" type="checkbox" :disabled="flat" /> Step down by itself when frames run over budget</label>
-          <p class="agents-note">At rest every agent is a still image of its own 3D cup, looking right. Hovering a row brings that one cup to life in the shared canvas; leaving lets it look back, then hands over to the image again. Nothing is drawn while the pointer is elsewhere.</p>
+          <p class="agents-note">At rest every agent is a still image of its own 3D cup, looking right. Hovering a row brings that one cup to life in the shared canvas; leaving lets it look back, then hands over to the image again. Nothing is drawn while nobody thinks and the pointer is elsewhere.</p>
+          <p class="agents-note">An agent that thinks comes to life too, with its own personality and steam: up to {{ slots }} at once at this quality, taken from the top of what is visible, plus the hovered one. The others keep their image with a light steam drawn over it. When one stops, it eases back to its resting pose before its image returns.</p>
           <p v-if="reduced" class="agents-note">Reduced motion is on: the cups stay still images, even on hover.</p>
           <p v-if="notice" class="agents-note" role="status">{{ notice }}</p>
         </div>

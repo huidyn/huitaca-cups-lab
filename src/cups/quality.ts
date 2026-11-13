@@ -18,6 +18,28 @@ export const QUALITY: Record<QualityId, Quality> = {
 }
 export const QUALITY_ORDER: QualityId[] = ['high', 'balanced', 'low', 'static']
 
+// Combien d'agents qui réfléchissent sont vivants (3D) en même temps, en plus de celui qu'on survole.
+// Les autres gardent leur image, avec une vapeur dessinée par-dessus. C'est le premier réglage à
+// baisser sur un appareil modeste : il divise le coût sans rien enlaidir.
+export const LIVE_SLOTS: Record<QualityId, number> = { high: 3, balanced: 2, low: 1, static: 0 }
+
+// Point de départ d'après ce que l'appareil dit de lui-même. Ce n'est qu'un indice (les navigateurs
+// arrondissent ces valeurs, et certains les taisent) : c'est le juge, d'après les images réellement
+// dessinées, qui décide ensuite.
+export function suggestTier(device: { cores?: number; memoryGb?: number; saveData?: boolean }): Exclude<QualityId, 'static'> {
+  if (device.saveData) return 'low'
+  const cores = device.cores || 8
+  const memory = device.memoryGb || 8
+  if (cores <= 2 || memory <= 2) return 'low'
+  if (cores <= 4 || memory <= 4) return 'balanced'
+  return 'high'
+}
+
+// Le plus bas de deux niveaux : un niveau retenu d'une visite précédente ne remonte pas tout seul.
+export function lowerTier<T extends QualityId>(a: T, b: T): T {
+  return QUALITY_ORDER.indexOf(a) >= QUALITY_ORDER.indexOf(b) ? a : b
+}
+
 // Ce que le dessin peut coûter au processeur par image : le reste de l'app doit tenir dans l'image.
 export const COST_BUDGET_MS = 6
 

@@ -5,7 +5,7 @@ import { bandLayout, designSvg, MASK_INKS, maskWidth, rasterizeSvg } from './pat
 import type { VesselDefinition } from './types'
 import type { AccessoryId } from './accessories'
 import type { Performance, PointerState } from './personality'
-import { facePose } from './expressions'
+import { blendFace, facePose } from './expressions'
 import { createSteam, steamScale } from './steam'
 import { createMorph } from './morph'
 import { QUALITY, type QualityId, type Sample } from './quality'
@@ -47,6 +47,10 @@ export interface GalleryOptions {
   resting?: { x: number; y: number }
   // Appelée quand l'ensemble des tasses dessinées change : la page cache leur image, montre les autres.
   onShown?: (indices: number[]) => void
+  // Mode repos : ce que joue la tasse `index` tant qu'elle « joue » (`setActing`) : un agent qui
+  // réfléchit, avec sa personnalité et sa vapeur. Chaque tasse a son propre interprète, donc son
+  // propre rythme. Quand elle cesse de jouer, elle revient à la pose de repos puis rend la main à l'image.
+  act?: (index: number, dt: number, pointer: PointerState) => Performance
 }
 
 // La tasse suit le curseur moins que ses yeux, et plus lentement : c'est le regard qui mène.
@@ -76,6 +80,13 @@ const MORPH_IN = 0.16
 // Un accessoire prend un peu plus de temps à se poser qu'un motif à paraître.
 const WEAR_OUT = 0.16
 const WEAR_IN = 0.3
+// Entrée et sortie du jeu d'une tasse au repos : la pose glisse de l'image vers le jeu, et retour.
+const ACT_BLEND = 0.45
+// Une tasse qui réfléchit sans être survolée n'a pas besoin de plus : deux fois moins d'images.
+const ACT_FPS = 30
+// Décalage d'horloge entre deux vapeurs voisines : jamais les mêmes volutes au même instant.
+const STEAM_PHASE = 1.7
+const mix = (a: number, b: number, t: number) => a + (b - a) * t
 // Départ et arrivée en douceur, milieu rapide : les formes intermédiaires ne s'attardent pas.
 const ease = (t: number) => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2
 
@@ -140,12 +151,12 @@ export function createCupGallery(canvas: HTMLCanvasElement, views: CupView[], op
     const top = Math.max(cup.topY - framing.lift, new Box3().setFromObject(pivot).max.y)
     const ceiling = framing.halfHeight - STEAM_MARGIN
     const start = Math.min(top + STEAM_BASE, ceiling - STEAM_MIN)
-    const steam = options.perform ? createSteam(Math.min(STEAM_MAX, ceiling - start), options.steamColor) : undefined
+    const steam = options.perform || (options.resting && options.act) ? createSteam(Math.min(STEAM_MAX, ceiling - start), options.steamColor) : undefined
     if (steam) {
       steam.group.position.set(pivot.position.x, start, 0)
       scene.add(steam.group)
     }
-    return { element, vessel, design, accessory, morph: undefined as Morphing | undefined, maskWidth: 0, maskReady: Promise.resolve(), awake: false, settled: true, cup, scene, camera, steam, steamY: steam?.group.position.y ?? 0, x: 0, y: 0, bx: 0, by: 0, tx: 0, ty: 0 }
+    return { element, vessel, design, accessory, morph: undefined as Morphing | undefined, maskWidth: 0, maskReady: Promise.resolve(), awake: false, settled: true, acting: false, act: 0, steamLevel: 0, cup, scene, camera, steam, steamY: steam?.group.position.y ?? 0, x: 0, y: 0, bx: 0, by: 0, tx: 0, ty: 0 }
   })
   const resting = options.resting
   let shown: number[] = []
@@ -246,17 +257,60 @@ export function createCupGallery(canvas: HTMLCanvasElement, views: CupView[], op
 
   // Attitude de la tasse d'après son regard courant (yeux) et son corps (plus lent).
   function pose(entry: typeof entries[number], sway: number) {
-    entry.cup.root.rotation.y = entry.bx * BODY_YAW + sway
-    entry.cup.root.rotation.x = bodyPitch(entry.by)
+    entry.cup.root.rotation.set(bodyPitch(entry.by), entry.bx * BODY_YAW + sway, 0)
+    if (resting) entry.cup.root.position.y = 0
     entry.cup.look(entry.x, entry.y)
   }
 
-  // Une tasse au repos, arrivée à son regard de repos, n'est pas dessinée : la page montre son image.
-  const hidden = (entry: typeof entries[number]) => Boolean(resting) && !entry.awake && entry.settled
+  // Joue-t-elle encore : en scène, en train d'y entrer ou d'en sortir, ou sa vapeur pas encore dissipée.
+  const playing = (entry: typeof entries[number]) =>
+    Boolean(options.act) && ((entry.acting && !reducedMotion.matches) || entry.act > 0 || entry.steamLevel > 0.01)
+  // Une tasse au repos, arrivée à son regard de repos et qui ne joue plus, n'est pas dessinée :
+  // la page montre son image.
+  const hidden = (entry: typeof entries[number]) => Boolean(resting) && !entry.awake && entry.settled && !playing(entry)
+
+  // Le jeu de la tasse, fondu avec sa pose de repos (ou de survol) : poids 0, c'est exactement l'image.
+  function play(entry: typeof entries[number], index: number, dt: number) {
+    const on = entry.acting && !reducedMotion.matches
+    entry.act = Math.max(0, Math.min(1, entry.act + (on ? dt : -dt) / ACT_BLEND))
+    const played = options.act!(index, dt, { x: entry.tx, y: entry.ty, active: entry.awake })
+    const weight = ease(entry.act)
+    const { head } = played.face
+    entry.cup.root.rotation.set(
+      mix(bodyPitch(entry.by), bodyPitch(played.turn[1]) - head.pitch * RADIANS, weight),
+      mix(entry.bx * BODY_YAW, played.turn[0] * BODY_YAW + head.yaw * RADIANS, weight),
+      head.roll * RADIANS * weight
+    )
+    entry.cup.root.position.y = played.lift * weight
+    entry.cup.pose(blendFace({ ...RESTING, gaze: [entry.x, entry.y] }, played.face, weight))
+    entry.steamLevel = played.steam
+    if (entry.steam) {
+      entry.steam.group.position.y = entry.steamY + played.lift * weight
+      const height = entry.element.getBoundingClientRect().height
+      entry.steam.update(clock + index * STEAM_PHASE, played.steam, height ? steamScale(height / (2 * framing.halfHeight)) : 1)
+    }
+  }
 
   function fit() {
-    const bounds = canvas.getBoundingClientRect()
     const density = Math.min(window.devicePixelRatio || 1, quality.density)
+    if (resting) {
+      // L'image de repos et la tasse vivante doivent tomber sur les mêmes pixels. Un canevas dont la
+      // taille n'est pas un nombre entier de pixels d'écran est étiré, donc flou et décalé d'un pixel :
+      // on lui donne une taille CSS qui vaut exactement sa grille, d'après la boîte de son parent.
+      const host = (canvas.parentElement ?? canvas).getBoundingClientRect()
+      const width = Math.round(host.width * density)
+      const height = Math.round(host.height * density)
+      if (!width || !height) return { bounds: host, density, ok: false }
+      if (renderer.getPixelRatio() !== density || canvas.width !== width || canvas.height !== height) {
+        canvas.style.width = `${width / density}px`
+        canvas.style.height = `${height / density}px`
+        renderer.setPixelRatio(density)
+        // Un quart de pixel de marge : three arrondit vers le bas, et la division n'est pas exacte.
+        renderer.setSize((width + 0.25) / density, (height + 0.25) / density, false)
+      }
+      return { bounds: canvas.getBoundingClientRect(), density, ok: true }
+    }
+    const bounds = canvas.getBoundingClientRect()
     if (!bounds.width || !bounds.height) return { bounds, density, ok: false }
     if (renderer.getPixelRatio() !== density ||
         canvas.width !== Math.round(bounds.width * density) ||
@@ -265,6 +319,13 @@ export function createCupGallery(canvas: HTMLCanvasElement, views: CupView[], op
       renderer.setSize(bounds.width, bounds.height, false)
     }
     return { bounds, density, ok: true }
+  }
+
+  // Zone de dessin donnée en pixels d'écran entiers, depuis le coin haut gauche du canevas.
+  function place(left: number, top: number, width: number, height: number, density: number) {
+    const at = [(left + 0.01) / density, (canvas.height - top - height + 0.01) / density, (width + 0.01) / density, (height + 0.01) / density] as const
+    renderer.setViewport(...at)
+    renderer.setScissor(...at)
   }
 
   function aimCamera(entry: typeof entries[number], aspect: number) {
@@ -293,8 +354,14 @@ export function createCupGallery(canvas: HTMLCanvasElement, views: CupView[], op
       // Hors du canevas (liste qui défile) : rien à dessiner, et pas de masque à calculer.
       if (box.bottom < bounds.top || box.top > bounds.bottom || box.right < bounds.left || box.left > bounds.right) continue
       aimCamera(entry, box.width / box.height)
-      renderer.setViewport(box.left - bounds.left, bounds.bottom - box.bottom, box.width, box.height)
-      renderer.setScissor(box.left - bounds.left, bounds.bottom - box.bottom, box.width, box.height)
+      if (resting) {
+        // Arrondi comme le navigateur arrondit l'image de la même rangée : chacun depuis la page.
+        const snap = (value: number) => Math.round(value * density)
+        place(snap(box.left) - snap(bounds.left), snap(box.top) - snap(bounds.top), snap(box.width), snap(box.height), density)
+      } else {
+        renderer.setViewport(box.left - bounds.left, bounds.bottom - box.bottom, box.width, box.height)
+        renderer.setScissor(box.left - bounds.left, bounds.bottom - box.bottom, box.width, box.height)
+      }
       void updateMask(entry, box.height * density / (2 * framing.halfHeight))
       renderer.render(entry.scene, entry.camera)
     }
@@ -312,7 +379,8 @@ export function createCupGallery(canvas: HTMLCanvasElement, views: CupView[], op
     frame = 0
     if (disposed || document.hidden) return
     // Cadence plafonnée : on rend la main sans dessiner, et le temps s'accumule dans le prochain dt.
-    if (previousTime && time - previousTime < 1000 / quality.maxFps - 2) {
+    const fps = resting && !entries.some(entry => entry.awake) ? Math.min(quality.maxFps, ACT_FPS) : quality.maxFps
+    if (previousTime && time - previousTime < 1000 / fps - 2) {
       invalidate()
       return
     }
@@ -372,7 +440,8 @@ export function createCupGallery(canvas: HTMLCanvasElement, views: CupView[], op
       else invalidate()
       return !still
     }
-    for (const entry of entries) {
+    if (resting && !reducedMotion.matches) clock += dt
+    for (const [index, entry] of entries.entries()) {
       if (hidden(entry)) continue
       const tx = reducedMotion.matches ? resting?.x ?? 0 : entry.tx
       const ty = reducedMotion.matches ? resting?.y ?? 0 : entry.ty
@@ -389,7 +458,12 @@ export function createCupGallery(canvas: HTMLCanvasElement, views: CupView[], op
       } else {
         moving = true
       }
-      pose(entry, animate ? Math.sin(turnTime * 0.5) * 0.22 : 0)
+      if (resting && playing(entry)) {
+        play(entry, index, dt)
+        if (playing(entry)) moving = true
+      } else {
+        pose(entry, animate ? Math.sin(turnTime * 0.5) * 0.22 : 0)
+      }
       if (advance(entry, reducedMotion.matches ? Infinity : dt)) moving = true
       follow(entry, cup => cup.pose({ ...RESTING, gaze: [entry.x, entry.y] }))
     }
@@ -577,6 +651,14 @@ export function createCupGallery(canvas: HTMLCanvasElement, views: CupView[], op
       entry.ty = resting.y
       invalidate()
     },
+    // Mode repos : la tasse joue (réfléchit) ou cesse de jouer ; elle rend la main à son image
+    // une fois revenue à la pose de repos et sa vapeur dissipée.
+    setActing(index: number, value: boolean) {
+      const entry = entries[index]
+      if (!resting || !options.act || !entry || entry.acting === value) return
+      entry.acting = value
+      invalidate()
+    },
     // Images de repos, faites par ce rendu-ci, dans ce canevas-ci, à la taille et la densité
     // où la tasse vivante sera dessinée : le passage de l'image à la 3D ne se voit pas.
     // Rend une image (data URL) par indice, ou undefined si le canevas n'a pas la place.
@@ -587,30 +669,34 @@ export function createCupGallery(canvas: HTMLCanvasElement, views: CupView[], op
       // Les motifs d'abord : une image sans son motif serait fausse pour toujours.
       await Promise.all(indices.map(i => entries[i] ? updateMask(entries[i], size * density / (2 * framing.halfHeight)) : undefined))
       if (disposed) return none()
-      const { bounds, ok } = fit()
+      const { ok } = fit()
       const pixels = Math.round(size * density)
-      if (!ok || bounds.width < size || bounds.height < size) return none()
+      if (!ok || canvas.width < pixels || canvas.height < pixels) return none()
       const copy = document.createElement('canvas')
       copy.width = copy.height = pixels
       const context = copy.getContext('2d')
       if (!context) return none()
       renderer.setScissorTest(true)
       // En haut à gauche du canevas, copié dans la même tâche : rien de tout cela ne s'affiche.
-      renderer.setViewport(0, bounds.height - size, size, size)
-      renderer.setScissor(0, bounds.height - size, size, size)
+      place(0, 0, pixels, pixels, density)
       const urls = indices.map(i => {
         const entry = entries[i]
         if (!entry) return undefined
         const live = { x: entry.x, y: entry.y, bx: entry.bx, by: entry.by }
+        const steaming = entry.steam?.group.visible ?? false
         entry.x = entry.bx = resting.x
         entry.y = entry.by = resting.y
         pose(entry, 0)
+        // L'image est celle du repos : jamais de vapeur dedans, même si la tasse réfléchit.
+        if (entry.steam) entry.steam.group.visible = false
         aimCamera(entry, 1)
         renderer.clear()
         renderer.render(entry.scene, entry.camera)
         context.clearRect(0, 0, pixels, pixels)
         context.drawImage(canvas, 0, 0, pixels, pixels, 0, 0, pixels, pixels)
         Object.assign(entry, live)
+        if (entry.steam) entry.steam.group.visible = steaming
+        // Une tasse qui joue reprend sa pose à l'image suivante (`invalidate` plus bas).
         pose(entry, 0)
         return copy.toDataURL('image/png')
       })
