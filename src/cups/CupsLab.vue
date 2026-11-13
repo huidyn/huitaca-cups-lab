@@ -11,6 +11,9 @@ import { EXPRESSION_BY_ID, expressionGlyph, type ExpressionId, EXPRESSIONS } fro
 import { createPerformer, DEFAULT_PERSONALITY, PERSONALITIES, type PersonalityId } from './personality'
 import './lab.css'
 
+// Le gris du texte discret de chaque thème, comme la vapeur du fil de discussion.
+const STEAM = { light: '#666666', dark: '#a3a3a3' }
+
 type Study = 'shapes' | 'colours' | 'designs' | 'accessories' | 'editor' | 'expressions' | 'personalities'
 const STUDIES: Record<Study, { number: string; label: string; eyebrow: string; title: string; description: string }> = {
   shapes: { number: '01', label: 'Shapes', eyebrow: 'STUDY 01 / FORM', title: 'A little character.', description: 'Eighteen shapes. Two eyes. Nothing extra.' },
@@ -117,6 +120,7 @@ watch([study, acted, isThinking, personalityId], () => {
   performer.setThinking(isThinking.value)
   gallery?.refresh()
 }, { immediate: true })
+watch(theme, value => gallery?.setSteamColor(STEAM[value]))
 function tryExpression(id: ExpressionId) {
   expressionId.value = id
   playing.value = false
@@ -210,6 +214,7 @@ async function syncMotion() {
       })), {
         turntable: manual.value, initialTurn: accessories ? turn.value : 0, onTurn: degrees => { turn.value = degrees },
         frame: accessories || editor ? ACCESSORY_FRAME : undefined,
+        steamColor: STEAM[theme.value],
         perform: emotive.value ? (dt, pointer, motionless) => performer.step(dt, pointer, motionless) : undefined
       })
       galleryVesselId = designs ? designVessel.value.id : undefined

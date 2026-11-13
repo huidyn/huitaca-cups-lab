@@ -5,7 +5,7 @@ import { bandLayout, designSvg, MASK_INKS, maskWidth, rasterizeSvg } from './pat
 import type { VesselDefinition } from './types'
 import type { AccessoryId } from './accessories'
 import type { Performance, PointerState } from './personality'
-import { createSteam } from './steam'
+import { createSteam, steamScale } from './steam'
 
 export interface CupView {
   element: HTMLElement
@@ -33,6 +33,7 @@ export interface GalleryOptions {
   frame?: CupFrame
   // Une tasse qui joue : expressions, clignements, vapeur. Appelée à chaque image.
   perform?: (dt: number, pointer: PointerState, still: boolean) => Performance
+  steamColor?: string
 }
 
 // La tasse suit le curseur moins que ses yeux, et plus lentement : c'est le regard qui mène.
@@ -45,6 +46,10 @@ const BODY_RATE = 5
 // Sans mouvement depuis ce délai, le curseur n'est plus « à côté ».
 const POINTER_IDLE = 3500
 const RADIANS = Math.PI / 180
+// La vapeur part juste au-dessus de la tasse et s'arrête avant le haut du cadre :
+// elle ne sort jamais de la boîte, même quand la tasse respire.
+const STEAM_BASE = 0.07
+const STEAM_MARGIN = 0.1
 
 function bodyPitch(y: number) {
   return -y * (y > 0 ? BODY_PITCH_UP : BODY_PITCH_DOWN)
@@ -94,9 +99,9 @@ export function createCupGallery(canvas: HTMLCanvasElement, views: CupView[], op
     scene.add(pivot)
     const camera = new OrthographicCamera(-1.6, 1.6, framing.halfHeight, -framing.halfHeight, 0.1, 50)
     // La vapeur reste face à la caméra : elle ne tourne pas avec la tasse.
-    const steam = options.perform ? createSteam(Math.min(1, framing.lift + framing.halfHeight - 0.1 - cup.topY)) : undefined
+    const steam = options.perform ? createSteam(Math.min(1, framing.lift + framing.halfHeight - STEAM_MARGIN - STEAM_BASE - cup.topY), options.steamColor) : undefined
     if (steam) {
-      steam.group.position.set(pivot.position.x, cup.topY - framing.lift + 0.07, 0)
+      steam.group.position.set(pivot.position.x, cup.topY - framing.lift + STEAM_BASE, 0)
       scene.add(steam.group)
     }
     return { element, vessel, design, maskWidth: 0, cup, scene, camera, steam, steamY: steam?.group.position.y ?? 0, x: 0, y: 0, bx: 0, by: 0, tx: 0, ty: 0 }
@@ -194,7 +199,9 @@ export function createCupGallery(canvas: HTMLCanvasElement, views: CupView[], op
         entry.cup.pose(act.face)
         if (entry.steam) {
           entry.steam.group.position.y = entry.steamY + act.lift
-          entry.steam.update(clock, act.steam)
+          // Plus épaisse à petite taille : à 48 px, un ruban fin disparaît.
+          const height = entry.element.getBoundingClientRect().height
+          entry.steam.update(clock, act.steam, height ? steamScale(height / (2 * framing.halfHeight)) : 1)
         }
       }
       draw()
@@ -329,6 +336,10 @@ export function createCupGallery(canvas: HTMLCanvasElement, views: CupView[], op
     setTurning(value: boolean) {
       turning = value
       turnTime = 0
+      invalidate()
+    },
+    setSteamColor(value: string) {
+      for (const entry of entries) entry.steam?.setColor(value)
       invalidate()
     },
     // À appeler quand ce que joue la tasse change alors que rien ne bouge (mouvement réduit).

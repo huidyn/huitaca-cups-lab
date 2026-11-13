@@ -14,6 +14,7 @@ const gallery = vi.hoisted(() => ({
   setDesign: vi.fn(),
   setElevation: vi.fn(),
   setTurning: vi.fn(),
+  setSteamColor: vi.fn(),
   refresh: vi.fn(),
   dispose: vi.fn()
 }))
