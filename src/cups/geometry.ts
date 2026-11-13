@@ -6,7 +6,7 @@ import {
 import type { Point2, VesselDefinition } from './types'
 import { createLidGeometry } from './lid'
 import { type AccessoryId, createPaintbrush, fitBrush, GAIWAN_LID_PARTS } from './accessories'
-import { createSprout, fitSprout } from './sprout'
+import { createSprout, fitSprout, sproutRoot } from './sprout'
 import { createBeret, fitBeret } from './beret'
 import { addEdgeTones } from './edge-tones'
 import { createTeaTag, fitTeaTag } from './tea-tag'
@@ -18,6 +18,14 @@ import { EYE_COLUMNS, EYE_POINTS, EYE_ROWS, eyeShape, type FacePose, facePose } 
 // Course du regard sur la paroi, en unités de tasse : les yeux bougent plus que la tasse ne tourne.
 // Plus de course vers le haut que vers le bas : l'écharpe passe juste sous les yeux.
 export const GAZE_TRAVEL = { x: 0.11, up: 0.12, down: 0.07 }
+
+// Comment chaque accessoire arrive : de combien il descend (ou monte, si négatif)
+// pour se poser. La pousse, elle, grandit depuis la tasse.
+const ENTRANCE: Record<AccessoryId, number> = {
+  paintbrush: 0.5, leaf: 0, beret: 0.3, 'tea-bag': 0.22, headphones: 0.3, scarf: -0.24
+}
+// L'accessoire est déjà opaque quand il finit de se poser.
+const ENTRANCE_FADE = 0.6
 
 export function radiusAtY(outline: Point2[], y: number): number {
   for (let i = 1; i < outline.length; i++) {
@@ -176,6 +184,7 @@ export function createCup(definition: VesselDefinition, options: { pattern?: boo
   }
 
   const extraMaterials: MeshBasicMaterial[] = []
+  let growFrom: Point2 | undefined
   const bare = root.children.length
   if (options.accessory === 'headphones') {
     const headphones = createHeadphones(fitHeadphones(definition, root))
@@ -209,6 +218,7 @@ export function createCup(definition: VesselDefinition, options: { pattern?: boo
   if (options.accessory === 'leaf') {
     const fit = fitSprout(options.fitVessel ?? definition)
     const sprout = createSprout(fit)
+    growFrom = sproutRoot(fit)
     extraMaterials.push(...sprout.materials)
     root.add(sprout.group)
     // La pousse soulève le couvercle du gaiwan, comme le pinceau.
@@ -216,7 +226,7 @@ export function createCup(definition: VesselDefinition, options: { pattern?: boo
   }
 
   // Tout ce qui a été ajouté depuis est l'accessoire.
-  const worn = root.children.slice(bare).map(object => ({ object, base: undefined as Vector3 | undefined }))
+  const worn = root.children.slice(bare).map(object => ({ object, home: object.position.y, base: undefined as Vector3 | undefined }))
   const face = definition.face
   const outline = definition.parts.find(p => p.id === face.surface)!.outline
   // La paroi ne porte des yeux que là où elle monte : au-delà, les sommets s'arrêtent au bord.
@@ -302,14 +312,32 @@ export function createCup(definition: VesselDefinition, options: { pattern?: boo
     setInk(value: number) {
       if (patternMaterial) patternMaterial.uniforms.ink!.value = Math.max(0, Math.min(1, value))
     },
-    // L'accessoire grandit ou se retire autour du visage, de 0 à 1.
-    setAccessoryScale(value: number) {
-      const scale = Math.max(0.001, Math.min(1, value))
+    // L'accessoire arrive ou repart, de 0 à 1 : le pinceau tombe dans la tasse, le béret et
+    // le casque se posent d'en haut, l'écharpe remonte, la pousse grandit. Tous en fondu.
+    setAccessoryReveal(value: number) {
+      if (!options.accessory) return
+      const shown = Math.max(0, Math.min(1, value))
+      const opacity = Math.min(1, shown / ENTRANCE_FADE)
+      for (const material of extraMaterials) {
+        if (material.transparent !== opacity < 1) {
+          material.transparent = opacity < 1
+          material.needsUpdate = true
+        }
+        material.opacity = opacity
+      }
+      const drop = ENTRANCE[options.accessory] * (1 - shown)
+      const scale = growFrom ? Math.max(0.001, shown) : 1
       for (const item of worn) {
         item.base ??= item.object.position.clone()
-        item.object.visible = value > 0.01
+        item.object.visible = shown > 0.01
         item.object.scale.setScalar(scale)
-        item.object.position.set(item.base.x, item.base.y + face.centerY * (1 - scale), item.base.z)
+        // La pousse grandit autour du point où elle sort ; le cadrage a pu décaler la tasse depuis.
+        const anchorX = growFrom ? growFrom[0] : item.base.x
+        const anchorY = growFrom ? growFrom[1] + item.base.y - item.home : item.base.y
+        item.object.position.set(
+          anchorX + (item.base.x - anchorX) * scale,
+          anchorY + (item.base.y - anchorY) * scale + drop,
+          item.base.z * scale)
       }
     },
     setMask(canvas: HTMLCanvasElement | null, anisotropy = 1) {

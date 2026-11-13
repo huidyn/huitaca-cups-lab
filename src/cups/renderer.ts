@@ -58,6 +58,9 @@ const STEAM_MARGIN = 0.1
 const MORPH_OUT = 0.11
 const MORPH_SHAPE = 0.32
 const MORPH_IN = 0.16
+// Un accessoire prend un peu plus de temps à se poser qu'un motif à paraître.
+const WEAR_OUT = 0.16
+const WEAR_IN = 0.3
 // Départ et arrivée en douceur, milieu rapide : les formes intermédiaires ne s'attardent pas.
 const ease = (t: number) => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2
 
@@ -147,7 +150,7 @@ export function createCupGallery(canvas: HTMLCanvasElement, views: CupView[], op
     }
     entry.cup.root.visible = true
     entry.cup.setInk(1)
-    entry.cup.setAccessoryScale(1)
+    entry.cup.setAccessoryReveal(1)
   }
 
   // Fait avancer la transition, et recopie l'attitude de la tasse sur ce qui est à l'écran.
@@ -169,13 +172,13 @@ export function createCupGallery(canvas: HTMLCanvasElement, views: CupView[], op
     if (leaving) {
       const p = ease(t / out)
       from.setInk(1 - p)
-      from.setAccessoryScale(1 - p)
+      from.setAccessoryReveal(1 - p)
     } else if (shaping) {
       mid?.update(ease((t - out) / shape))
     } else {
       const p = ease((t - out - shape) / into)
       entry.cup.setInk(p)
-      entry.cup.setAccessoryScale(p)
+      entry.cup.setAccessoryReveal(p)
     }
     return true
   }
@@ -437,13 +440,13 @@ export function createCupGallery(canvas: HTMLCanvasElement, views: CupView[], op
       if (mid) entry.scene.add(mid.root)
       entry.morph = {
         from, mid, time: 0,
-        out: before.design || before.accessory ? MORPH_OUT : 0,
+        out: before.accessory ? WEAR_OUT : before.design ? MORPH_OUT : 0,
         shape: sameShape ? 0 : MORPH_SHAPE,
-        into: view.design || view.accessory ? MORPH_IN : 0
+        into: view.accessory ? WEAR_IN : view.design ? MORPH_IN : 0
       }
       to.root.visible = false
       to.setInk(0)
-      to.setAccessoryScale(0)
+      to.setAccessoryReveal(0)
       invalidate()
     },
     setSteamColor(value: string) {

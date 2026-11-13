@@ -1,7 +1,8 @@
 import {
   Box3, BufferGeometry, DoubleSide, Float32BufferAttribute, Group, LatheGeometry,
-  Mesh, MeshBasicMaterial, Object3D, Raycaster, Vector2, Vector3
+  Mesh, MeshBasicMaterial, Object3D, Vector2, Vector3
 } from 'three'
+import { createCaster, shapeKey } from './caster'
 import { addEdgeTones } from './edge-tones'
 import type { VesselDefinition } from './types'
 
@@ -55,7 +56,8 @@ export interface HeadphoneFit {
   rise: number
   cushionPositions: number[]
 }
-const fits = new WeakMap<VesselDefinition, HeadphoneFit>()
+const fits = new Map<string, HeadphoneFit>()
+type Caster = ReturnType<typeof createCaster>
 
 // Rayon réel de tous les triangles qui passent dans une tranche de hauteur.
 // Les arêtes coupées aux deux limites comptent aussi, notamment sur les bols évasés.
@@ -130,7 +132,7 @@ function handleTilt(cup: Group, fit: Pick<HeadphoneFit, 'radius' | 'earY' | 'ear
   return 0.9
 }
 
-function placeEar(cup: Group, surfaces: Mesh[], rimY: number, earRadius: number) {
+function placeEar(cup: Group, surfaces: Mesh[], cast: Caster, rimY: number, earRadius: number) {
   const earY = rimY - earRadius - 0.02
   // Le coussin est un disque plat : on l'incline selon la paroi réelle pour qu'il
   // repose à plat, puis on le recule jusqu'à ce qu'aucune tranche ne le traverse.
@@ -160,7 +162,7 @@ function placeEar(cup: Group, surfaces: Mesh[], rimY: number, earRadius: number)
   const points = foam.attributes.position!
   let ringWall = -Infinity
   for (let i = 0; i < points.count; i++) {
-    const wall = wallDepth(surfaces, frame, points.getY(i), points.getZ(i))
+    const wall = wallDepth(cast, frame, points.getY(i), points.getZ(i))
     if (wall !== null) ringWall = Math.max(ringWall, wall)
   }
   foam.dispose()
@@ -173,15 +175,17 @@ function placeEar(cup: Group, surfaces: Mesh[], rimY: number, earRadius: number)
 }
 
 // Intersection dans le repère de l'écouteur, depuis l'extérieur vers la tasse.
-function wallDepth(surfaces: Mesh[], frame: Object3D, y: number, z: number) {
+function wallDepth(cast: Caster, frame: Object3D, y: number, z: number) {
   const origin = frame.localToWorld(new Vector3(2, y, z))
   const direction = new Vector3(-1, 0, 0).transformDirection(frame.matrixWorld)
-  const hit = new Raycaster(origin, direction, 0, 4).intersectObjects(surfaces, false)[0]
-  return hit ? frame.worldToLocal(hit.point.clone()).x : null
+  const distance = cast(origin, direction, 4)
+  return distance === null ? null : frame.worldToLocal(origin.addScaledVector(direction, distance)).x
 }
 
 export function fitHeadphones(vessel: VesselDefinition, cup: Group): HeadphoneFit {
-  const cached = fits.get(vessel)
+  // Rangée par forme, pas par objet : une autre couleur ne refait pas la pose.
+  const key = shapeKey(vessel)
+  const cached = fits.get(key)
   if (cached) return cached
   const rim = vessel.parts.filter(part => part.id === 'rim' || (vessel.lid && part.id === 'lid')).flatMap(part => part.outline)
   if (!rim.length) throw new Error(`${vessel.id}: headphones need a rim`)
@@ -194,17 +198,18 @@ export function fitHeadphones(vessel: VesselDefinition, cup: Group): HeadphoneFi
   const earTop = lidParts.length ? Math.min(...lidParts.map(point => point[1])) : rimY
   const surfaces: Mesh[] = []
   cup.traverse(object => { if (object instanceof Mesh && object.name !== 'handle') surfaces.push(object) })
+  const cast = createCaster(surfaces)
   // Au-delà de cette avance, l'oreille déplacée masquerait l'œil vu de trois
   // quarts : sur une anse très haute, la coque rapetisse un peu plutôt.
-  let ear = placeEar(cup, surfaces, earTop, Math.min(0.46, Math.max(0.38, rimRadius * 0.52)))
-  while (ear.tilt > 0.635 && ear.earRadius > 0.3) ear = placeEar(cup, surfaces, earTop, ear.earRadius - 0.01)
+  let ear = placeEar(cup, surfaces, cast, earTop, Math.min(0.46, Math.max(0.38, rimRadius * 0.52)))
+  while (ear.tilt > 0.635 && ear.earRadius > 0.3) ear = placeEar(cup, surfaces, cast, earTop, ear.earRadius - 0.01)
   const { earY, earRadius, radius, lean, tilt } = ear
   const frame = earFrame(ear, 1)
   frame.updateMatrixWorld(true)
   const foam = cushionGeometry(earRadius)
   const points = foam.attributes.position!
   for (let i = 0; i < points.count; i++) {
-    const wall = wallDepth(surfaces, frame, points.getY(i), points.getZ(i))
+    const wall = wallDepth(cast, frame, points.getY(i), points.getZ(i))
     if (wall === null) continue
     // Une mousse souple, pas un moulage : déformation douce et limitée, sans
     // chercher à remplir tous les jours entre l'anneau et la tasse.
@@ -228,7 +233,13 @@ export function fitHeadphones(vessel: VesselDefinition, cup: Group): HeadphoneFi
   const band = { bandX: (left.x + right.x) / 2, bandZ: (left.z + right.z) / 2, heading: Math.atan2(right.z - left.z, right.x - left.x) }
   const bandY = right.y
   const highest = new Box3().setFromObject(cup).max.y
-  const ray = new Raycaster(new Vector3(), new Vector3(0, -1, 0))
+  const down = new Vector3(0, -1, 0)
+  const above = new Vector3()
+  // Hauteur de ce qui se trouve sous un point de l'arceau, ou null.
+  const under = (x: number, z: number) => {
+    const distance = cast(above.set(x, highest + 1, z), down)
+    return distance === null ? null : highest + 1 - distance
+  }
   // L'arceau monte d'abord tout droit au-dessus de tout ce qui est proche de ses
   // montants (rebord de couvercle du gaiwan, lèvre roulée), puis s'arrondit.
   let legTop = bandY
@@ -236,9 +247,8 @@ export function fitHeadphones(vessel: VesselDefinition, cup: Group): HeadphoneFi
     for (let inset = 0; inset <= 0.15 + 1e-9; inset += 0.025) {
       for (const depth of [-1, 0, 1]) {
         const [x, z] = bandPoint(band, side * (span - BAND_THICKNESS - inset), depth * BAND_DEPTH)
-        ray.ray.origin.set(x, highest + 1, z)
-        const hit = ray.intersectObjects(surfaces, false)[0]
-        if (hit) legTop = Math.max(legTop, hit.point.y + 0.03)
+        const y = under(x, z)
+        if (y !== null) legTop = Math.max(legTop, y + 0.03)
       }
     }
   }
@@ -254,14 +264,13 @@ export function fitHeadphones(vessel: VesselDefinition, cup: Group): HeadphoneFi
       const normalX = nx / Math.hypot(nx, ny)
       // Sous le sommet, c'est le coussin, plus épais et décalé vers le bas, qui doit passer.
       const pad = padSection(t)
-      const under = pad ? pad.shift + pad.across : BAND_THICKNESS
+      const below = pad ? pad.shift + pad.across : BAND_THICKNESS
       const wide = pad ? pad.depth : BAND_DEPTH
       for (const across of [-1, 0, 1]) {
         for (const depth of [-1, 0, 1]) {
-          const [x, z] = bandPoint(band, span * Math.cos(t) + across * under * normalX, depth * wide)
-          ray.ray.origin.set(x, highest + 1, z)
-          const hit = ray.intersectObjects(surfaces, false)[0]
-          if (hit) needed = Math.max(needed, (hit.point.y + 0.025 + under - legTop) / Math.sin(t))
+          const [x, z] = bandPoint(band, span * Math.cos(t) + across * below * normalX, depth * wide)
+          const y = under(x, z)
+          if (y !== null) needed = Math.max(needed, (y + 0.025 + below - legTop) / Math.sin(t))
         }
       }
     }
@@ -269,7 +278,7 @@ export function fitHeadphones(vessel: VesselDefinition, cup: Group): HeadphoneFi
     rise = needed
   }
   const fit = { radius, earY, earRadius, lean, tilt, span, footSpan, ...band, bandY, legTop, rise, cushionPositions }
-  fits.set(vessel, fit)
+  fits.set(key, fit)
   return fit
 }
 

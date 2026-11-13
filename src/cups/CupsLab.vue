@@ -57,7 +57,7 @@ const PHASES: Record<Phase, { next: Phase; ms: number }> = {
 }
 const ACCESSORIES: { id: AccessoryId; name: string }[] = [
   { id: 'paintbrush', name: 'Paintbrush' },
-  { id: 'leaf', name: 'Leaf' },
+  { id: 'leaf', name: 'Sprout' },
   { id: 'beret', name: 'Beret' },
   { id: 'tea-bag', name: 'Tea tag' },
   { id: 'headphones', name: 'Headphones' },

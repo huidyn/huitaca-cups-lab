@@ -33,6 +33,11 @@ export interface SproutFit {
   path: Point2[]
   lid?: { pivot: Point2; angle: number; lift: number }
 }
+// D'où la pousse sort de la tasse : c'est de là qu'elle grandit.
+export function sproutRoot(fit: SproutFit): Point2 {
+  const top = fit.path.at(-1)!
+  return [top[0], top[1] - SPROUT.above]
+}
 const fits = new WeakMap<VesselDefinition, SproutFit>()
 
 export function fitSprout(vessel: VesselDefinition): SproutFit {

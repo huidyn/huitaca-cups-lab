@@ -1,4 +1,5 @@
 import { BufferGeometry, DoubleSide, Float32BufferAttribute, Group, Mesh, MeshBasicMaterial } from 'three'
+import { shapeKey } from './caster'
 import type { TubeGeometry } from 'three'
 import type { VesselDefinition } from './types'
 import { addEdgeTones } from './edge-tones'
@@ -22,7 +23,7 @@ export interface ScarfFit {
   handleShift: number
   handleSqueeze: number
 }
-const fits = new WeakMap<VesselDefinition, ScarfFit>()
+const fits = new Map<string, ScarfFit>()
 
 // Enveloppe des pièces réelles, y compris le porte-verre, pas seulement du corps.
 function surfaceRadius(vessel: VesselDefinition, y: number) {
@@ -104,7 +105,8 @@ function knotFrame(fit: ScarfFit) {
 }
 
 export function fitScarf(vessel: VesselDefinition, handle: TubeGeometry | undefined): ScarfFit {
-  const cached = fits.get(vessel)
+  const key = shapeKey(vessel)
+  const cached = fits.get(key)
   if (cached) return cached
   if (vessel.handle && !handle) throw new Error(`${vessel.id}: scarf needs the rendered handle geometry`)
   const face = vessel.face
@@ -196,7 +198,7 @@ export function fitScarf(vessel: VesselDefinition, handle: TubeGeometry | undefi
   const knot = frame.center - 0.35 * frame.halfHeight
   // La pointe oblique descend encore de 0,028 environ : elle reste juste au-dessus du sol utile.
   fit.tailLength = Math.min(0.75, knot - tailFloor - 0.06)
-  fits.set(vessel, fit)
+  fits.set(key, fit)
   return fit
 }
 

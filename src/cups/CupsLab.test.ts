@@ -441,7 +441,7 @@ describe('cup lab cultural section', () => {
     expect([...picker.querySelectorAll('optgroup')].map(group => group.children.length)).toEqual([12, 6])
     expect(root.querySelector('.accessory-picker')?.textContent).toContain('Bristles out')
     expect([...root.querySelectorAll<HTMLInputElement>('input[name="cup-accessory"]')].map(input => input.getAttribute('aria-label')))
-      .toEqual(['Paintbrush', 'Leaf', 'Beret', 'Tea tag', 'Headphones', 'Scarf'])
+      .toEqual(['Paintbrush', 'Sprout', 'Beret', 'Tea tag', 'Headphones', 'Scarf'])
     expect(root.querySelector('input[name="cup-colour"], .design-picker, .culture-sources')).toBeNull()
     for (const vessel of vessels) {
       await chooseCup(vessel.id)
@@ -487,8 +487,8 @@ describe('cup lab cultural section', () => {
   })
 
   it.each([
-    { reduced: false, accessory: 'leaf', name: 'leaf', note: 'two-leaf sprout' },
-    { reduced: true, accessory: 'leaf', name: 'leaf', note: 'two-leaf sprout' },
+    { reduced: false, accessory: 'leaf', name: 'sprout', note: 'two-leaf sprout' },
+    { reduced: true, accessory: 'leaf', name: 'sprout', note: 'two-leaf sprout' },
     { reduced: false, accessory: 'beret', name: 'beret', note: 'soft red beret' },
     { reduced: true, accessory: 'beret', name: 'beret', note: 'soft red beret' },
     { reduced: false, accessory: 'tea-bag', name: 'tea tag', note: 'yellow tea tag' },
