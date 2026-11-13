@@ -44,9 +44,10 @@ uniform vec3 inkA;
 uniform vec3 inkB;
 uniform sampler2D mask;
 uniform float masked;
+uniform float ink;
 varying vec2 vBand;
 void main() {
-  vec4 m = texture2D(mask, vBand) * masked * step(0.0, vBand.y) * step(vBand.y, 1.0);
+  vec4 m = texture2D(mask, vBand) * masked * ink * step(0.0, vBand.y) * step(vBand.y, 1.0);
   gl_FragColor = vec4(body * (1.0 - m.r - m.g) + inkA * m.r + inkB * m.g, 1.0);
   #include <colorspace_fragment>
 }`
@@ -58,7 +59,9 @@ function createPatternMaterial(colors: Record<string, string>, slot: string) {
       inkA: { value: new Color(colors.inkA ?? colors[slot]) },
       inkB: { value: new Color(colors.inkB ?? colors[slot]) },
       mask: { value: null as Texture | null },
-      masked: { value: 0 }
+      masked: { value: 0 },
+      // Intensité du motif, de 0 à 1 : il apparaît et s'efface en fondu.
+      ink: { value: 1 }
     },
     vertexShader: patternVertex,
     fragmentShader: patternFragment,
@@ -173,6 +176,7 @@ export function createCup(definition: VesselDefinition, options: { pattern?: boo
   }
 
   const extraMaterials: MeshBasicMaterial[] = []
+  const bare = root.children.length
   if (options.accessory === 'headphones') {
     const headphones = createHeadphones(fitHeadphones(definition, root))
     extraMaterials.push(...headphones.materials)
@@ -211,6 +215,8 @@ export function createCup(definition: VesselDefinition, options: { pattern?: boo
     if (fit.lid) tiltLid(root, fit.lid)
   }
 
+  // Tout ce qui a été ajouté depuis est l'accessoire.
+  const worn = root.children.slice(bare).map(object => ({ object, base: undefined as Vector3 | undefined }))
   const face = definition.face
   const outline = definition.parts.find(p => p.id === face.surface)!.outline
   // La paroi ne porte des yeux que là où elle monte : au-delà, les sommets s'arrêtent au bord.
@@ -291,6 +297,19 @@ export function createCup(definition: VesselDefinition, options: { pattern?: boo
         if (colors[patternSlot]) u.body!.value.set(colors[patternSlot])
         if (colors.inkA) u.inkA!.value.set(colors.inkA)
         if (colors.inkB) u.inkB!.value.set(colors.inkB)
+      }
+    },
+    setInk(value: number) {
+      if (patternMaterial) patternMaterial.uniforms.ink!.value = Math.max(0, Math.min(1, value))
+    },
+    // L'accessoire grandit ou se retire autour du visage, de 0 à 1.
+    setAccessoryScale(value: number) {
+      const scale = Math.max(0.001, Math.min(1, value))
+      for (const item of worn) {
+        item.base ??= item.object.position.clone()
+        item.object.visible = value > 0.01
+        item.object.scale.setScalar(scale)
+        item.object.position.set(item.base.x, item.base.y + face.centerY * (1 - scale), item.base.z)
       }
     },
     setMask(canvas: HTMLCanvasElement | null, anisotropy = 1) {

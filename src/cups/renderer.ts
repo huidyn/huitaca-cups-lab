@@ -5,7 +5,9 @@ import { bandLayout, designSvg, MASK_INKS, maskWidth, rasterizeSvg } from './pat
 import type { VesselDefinition } from './types'
 import type { AccessoryId } from './accessories'
 import type { Performance, PointerState } from './personality'
+import { facePose } from './expressions'
 import { createSteam, steamScale } from './steam'
+import { createMorph } from './morph'
 
 export interface CupView {
   element: HTMLElement
@@ -46,10 +48,18 @@ const BODY_RATE = 5
 // Sans mouvement depuis ce délai, le curseur n'est plus « à côté ».
 const POINTER_IDLE = 3500
 const RADIANS = Math.PI / 180
+const RESTING = facePose()
 // La vapeur part juste au-dessus de la tasse et s'arrête avant le haut du cadre :
 // elle ne sort jamais de la boîte, même quand la tasse respire.
 const STEAM_BASE = 0.07
 const STEAM_MARGIN = 0.1
+
+// Passage d'une tasse à l'autre : le motif et l'accessoire s'effacent, la forme glisse, puis ils reviennent.
+const MORPH_OUT = 0.11
+const MORPH_SHAPE = 0.32
+const MORPH_IN = 0.16
+// Départ et arrivée en douceur, milieu rapide : les formes intermédiaires ne s'attardent pas.
+const ease = (t: number) => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2
 
 function bodyPitch(y: number) {
   return -y * (y > 0 ? BODY_PITCH_UP : BODY_PITCH_DOWN)
@@ -89,13 +99,19 @@ export function createCupGallery(canvas: HTMLCanvasElement, views: CupView[], op
   const anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy())
   const turntable = options.turntable ?? false
   const framing = options.frame ?? DEFAULT_FRAME
-  const entries = views.map(({ element, vessel, design, accessory, fitVessel }) => {
+  function build({ vessel, design, accessory, fitVessel }: Omit<CupView, 'element'>) {
     const cup = createCup(vessel, { pattern: Boolean(design && vessel.pattern), accessory, fitVessel })
+    // Le pivot est au milieu du corps, et non au pied de la tasse.
+    for (const child of cup.root.children) child.position.y -= framing.lift
+    cup.root.position.x = vessel.handle ? -0.18 : 0
+    return cup
+  }
+  type Cup = ReturnType<typeof build>
+  interface Morphing { from: Cup; mid?: ReturnType<typeof createMorph>; time: number; out: number; shape: number; into: number }
+  const entries = views.map(({ element, vessel, design, accessory, fitVessel }) => {
+    const cup = build({ vessel, design, accessory, fitVessel })
     const scene = new Scene()
     const pivot = cup.root
-    // Le pivot est au milieu du corps, et non au pied de la tasse.
-    for (const child of pivot.children) child.position.y -= framing.lift
-    pivot.position.x = vessel.handle ? -0.18 : 0
     scene.add(pivot)
     const camera = new OrthographicCamera(-1.6, 1.6, framing.halfHeight, -framing.halfHeight, 0.1, 50)
     // La vapeur reste face à la caméra : elle ne tourne pas avec la tasse.
@@ -104,7 +120,7 @@ export function createCupGallery(canvas: HTMLCanvasElement, views: CupView[], op
       steam.group.position.set(pivot.position.x, cup.topY - framing.lift + STEAM_BASE, 0)
       scene.add(steam.group)
     }
-    return { element, vessel, design, maskWidth: 0, cup, scene, camera, steam, steamY: steam?.group.position.y ?? 0, x: 0, y: 0, bx: 0, by: 0, tx: 0, ty: 0 }
+    return { element, vessel, design, accessory, morph: undefined as Morphing | undefined, maskWidth: 0, cup, scene, camera, steam, steamY: steam?.group.position.y ?? 0, x: 0, y: 0, bx: 0, by: 0, tx: 0, ty: 0 }
   })
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)')
   let frame = 0
@@ -118,6 +134,64 @@ export function createCupGallery(canvas: HTMLCanvasElement, views: CupView[], op
   let frames = 0
   let yaw = (options.initialTurn ?? 0) * Math.PI / 180
   let drag: { pointer: number; x: number } | undefined
+
+  function endMorph(entry: typeof entries[number]) {
+    const morph = entry.morph
+    if (!morph) return
+    entry.morph = undefined
+    entry.scene.remove(morph.from.root)
+    morph.from.dispose()
+    if (morph.mid) {
+      entry.scene.remove(morph.mid.root)
+      morph.mid.dispose()
+    }
+    entry.cup.root.visible = true
+    entry.cup.setInk(1)
+    entry.cup.setAccessoryScale(1)
+  }
+
+  // Fait avancer la transition, et recopie l'attitude de la tasse sur ce qui est à l'écran.
+  function advance(entry: typeof entries[number], dt: number) {
+    const morph = entry.morph
+    if (!morph) return false
+    morph.time += dt
+    const { from, mid, out, shape, into } = morph
+    const t = morph.time
+    if (t >= out + shape + into) {
+      endMorph(entry)
+      return false
+    }
+    const leaving = t < out
+    const shaping = !leaving && t < out + shape
+    from.root.visible = leaving || (shaping && !mid)
+    if (mid) mid.root.visible = shaping
+    entry.cup.root.visible = !leaving && !shaping
+    if (leaving) {
+      const p = ease(t / out)
+      from.setInk(1 - p)
+      from.setAccessoryScale(1 - p)
+    } else if (shaping) {
+      mid?.update(ease((t - out) / shape))
+    } else {
+      const p = ease((t - out - shape) / into)
+      entry.cup.setInk(p)
+      entry.cup.setAccessoryScale(p)
+    }
+    return true
+  }
+
+  function follow(entry: typeof entries[number], pose: (cup: { pose: Cup['pose'] }) => void) {
+    const morph = entry.morph
+    if (!morph) return
+    const { rotation, position } = entry.cup.root
+    for (const other of [morph.from.root, morph.mid?.root]) {
+      if (!other) continue
+      other.rotation.copy(rotation)
+      other.position.y = position.y
+    }
+    pose(morph.from)
+    if (morph.mid) pose(morph.mid)
+  }
 
   function updateMask(entry: typeof entries[number], pixelsPerUnit: number) {
     const design = entry.design
@@ -197,6 +271,8 @@ export function createCupGallery(canvas: HTMLCanvasElement, views: CupView[], op
         )
         entry.cup.root.position.y = act.lift
         entry.cup.pose(act.face)
+        advance(entry, still ? Infinity : dt)
+        follow(entry, cup => cup.pose(act.face))
         if (entry.steam) {
           entry.steam.group.position.y = entry.steamY + act.lift
           // Plus épaisse à petite taille : à 48 px, un ruban fin disparaît.
@@ -228,6 +304,8 @@ export function createCupGallery(canvas: HTMLCanvasElement, views: CupView[], op
       entry.cup.root.rotation.y = entry.bx * BODY_YAW + (animate ? Math.sin(turnTime * 0.5) * 0.22 : 0)
       entry.cup.root.rotation.x = bodyPitch(entry.by)
       entry.cup.look(entry.x, entry.y)
+      if (advance(entry, reducedMotion.matches ? Infinity : dt)) moving = true
+      follow(entry, cup => cup.pose({ ...RESTING, gaze: [entry.x, entry.y] }))
     }
     draw()
     if (moving) invalidate()
@@ -338,6 +416,36 @@ export function createCupGallery(canvas: HTMLCanvasElement, views: CupView[], op
       turnTime = 0
       invalidate()
     },
+    // Remplace la tasse d'une vue par une autre, en fondu de forme plutôt que d'un coup.
+    replace(index: number, view: Omit<CupView, 'element'>) {
+      const entry = entries[index]
+      if (!entry) return
+      endMorph(entry)
+      const from = entry.cup
+      const before = { vessel: entry.vessel, design: entry.design, accessory: entry.accessory }
+      const to = build(view)
+      to.root.rotation.copy(from.root.rotation)
+      to.root.position.y = from.root.position.y
+      entry.cup = to
+      entry.vessel = view.vessel
+      entry.design = view.design
+      entry.accessory = view.accessory
+      entry.maskWidth = 0
+      entry.scene.add(to.root)
+      const sameShape = before.vessel.id === view.vessel.id
+      const mid = sameShape ? undefined : createMorph(before.vessel, view.vessel, framing.lift)
+      if (mid) entry.scene.add(mid.root)
+      entry.morph = {
+        from, mid, time: 0,
+        out: before.design || before.accessory ? MORPH_OUT : 0,
+        shape: sameShape ? 0 : MORPH_SHAPE,
+        into: view.design || view.accessory ? MORPH_IN : 0
+      }
+      to.root.visible = false
+      to.setInk(0)
+      to.setAccessoryScale(0)
+      invalidate()
+    },
     setSteamColor(value: string) {
       for (const entry of entries) entry.steam?.setColor(value)
       invalidate()
@@ -366,6 +474,7 @@ export function createCupGallery(canvas: HTMLCanvasElement, views: CupView[], op
         element.removeEventListener('keydown', key)
       }
       entries.forEach(entry => {
+        endMorph(entry)
         entry.cup.dispose()
         entry.steam?.dispose()
       })

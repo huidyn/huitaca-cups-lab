@@ -14,6 +14,7 @@ const gallery = vi.hoisted(() => ({
   setDesign: vi.fn(),
   setElevation: vi.fn(),
   setTurning: vi.fn(),
+  replace: vi.fn(),
   setSteamColor: vi.fn(),
   refresh: vi.fn(),
   dispose: vi.fn()
@@ -540,7 +541,14 @@ describe('cup lab cultural section', () => {
       await nextTick()
       await vi.waitFor(() => expect(root.querySelector('.cup-stage')?.getAttribute('data-ready')).toBe('true'))
     }
-    const lastView = () => vi.mocked(createCupGallery).mock.calls.at(-1)![1][0]!
+    // Dans l'éditeur, une autre tasse remplace la précédente sans reconstruire la scène.
+    const lastView = () => {
+      const built = vi.mocked(createCupGallery).mock
+      const replaced = gallery.replace.mock
+      return (replaced.invocationCallOrder.at(-1) ?? 0) > built.invocationCallOrder.at(-1)!
+        ? replaced.calls.at(-1)![1] as typeof built.calls[number][1][number]
+        : built.calls.at(-1)![1][0]!
+    }
     const lastOptions = () => vi.mocked(createCupGallery).mock.calls.at(-1)![2]!
 
     it('opens as the fifth study with a cursor-following cup and three tabs', async () => {
@@ -571,7 +579,7 @@ describe('cup lab cultural section', () => {
         .toEqual(['none', 'paintbrush', 'leaf', 'beret', 'tea-bag', 'headphones', 'scarf'])
     })
 
-    it('rebuilds for a new vessel or accessory but recolours in place', async () => {
+    it('morphs to a new vessel or accessory without rebuilding the scene, and recolours in place', async () => {
       await mount()
       await chooseStudy('Editor')
       const calls = vi.mocked(createCupGallery).mock.calls.length
@@ -579,12 +587,17 @@ describe('cup lab cultural section', () => {
       await pick('editor-colour', 'oat')
       expect(createCupGallery).toHaveBeenCalledTimes(calls)
       expect(gallery.setColors).toHaveBeenLastCalledWith(0, expect.objectContaining({ body: palette.find(option => option.id === 'oat')!.colors.body }))
+      const recolours = gallery.setColors.mock.calls.length
       await pick('editor-vessel', 'tall-mug')
-      expect(createCupGallery).toHaveBeenCalledTimes(calls + 1)
+      expect(createCupGallery).toHaveBeenCalledTimes(calls)
+      expect(gallery.replace).toHaveBeenCalledTimes(1)
+      // L'ancienne tasse ne prend pas les couleurs de la nouvelle avant de se transformer.
+      expect(gallery.setColors).toHaveBeenCalledTimes(recolours)
       expect(lastView().vessel.id).toBe('tall-mug')
       expect(lastView().vessel.colors.body).toBe(palette.find(option => option.id === 'oat')!.colors.body)
       await pick('editor-accessory', 'beret')
-      expect(createCupGallery).toHaveBeenCalledTimes(calls + 2)
+      expect(createCupGallery).toHaveBeenCalledTimes(calls)
+      expect(gallery.replace).toHaveBeenCalledTimes(2)
       expect(lastView().accessory).toBe('beret')
       expect(root.querySelector('.cup-viewport')?.getAttribute('aria-label')).toBe('Tall mug, oat, with a beret')
     })

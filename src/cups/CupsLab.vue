@@ -223,6 +223,8 @@ const everydayVessels = vessels.filter(vessel => !vessel.heritage)
 const culturalVessels = vessels.filter(vessel => vessel.heritage)
 const culturalStart = vessels.findIndex(vessel => vessel.heritage)
 let galleryVesselId: string | undefined
+// Ce que la scène de l'éditeur montre : une couleur ne se règle en place que sur la même tasse.
+let shownKey: string | undefined
 let disposed = false
 let media: MediaQueryList
 
@@ -272,6 +274,7 @@ async function syncMotion() {
         perform: emotive.value ? (dt, pointer, motionless) => performer.step(dt, pointer, motionless) : undefined
       })
       galleryVesselId = designs ? designVessel.value.id : undefined
+      shownKey = editor ? look.value.key : undefined
       gallery.setElevation(elevation.value)
       ready.value = true
     } catch {
@@ -291,10 +294,10 @@ watch(design, () => {
 // Dans l'éditeur, la scène n'est reconstruite que si la structure change ; une autre
 // couleur ou un autre motif de la même tasse se règle en place.
 watch(() => look.value.vessel.colors, colors => {
-  if ((study.value === 'editor' || emotive.value) && !look.value.design) gallery?.setColors(0, colors)
+  if ((study.value === 'editor' || emotive.value) && !look.value.design && shownKey === look.value.key) gallery?.setColors(0, colors)
 })
 watch(() => look.value.design, current => {
-  if ((study.value === 'editor' || emotive.value) && current) gallery?.setDesign(0, current)
+  if ((study.value === 'editor' || emotive.value) && current && shownKey === look.value.key) gallery?.setDesign(0, current)
 })
 watch([study, cultureId, cupId, shownAccessory, () => look.value.key], async ([currentStudy, currentCulture, currentCup, currentAccessory, currentKey], [previousStudy, previousCulture, previousCup, previousAccessory, previousKey]) => {
   if (currentStudy === previousStudy &&
@@ -302,9 +305,16 @@ watch([study, cultureId, cupId, shownAccessory, () => look.value.key], async ([c
       !((currentStudy === 'colours' || currentStudy === 'accessories') && currentCup !== previousCup) &&
       !(currentStudy === 'accessories' && currentAccessory !== previousAccessory) &&
       !((currentStudy === 'editor' || currentStudy === 'expressions' || currentStudy === 'personalities') && currentKey !== previousKey)) return
+  // Dans l'éditeur, on ne reconstruit pas : la tasse glisse d'une forme à l'autre.
+  if (currentStudy === 'editor' && previousStudy === 'editor' && gallery && !still.value) {
+    shownKey = look.value.key
+    gallery.replace(0, { vessel: look.value.vessel, fitVessel: look.value.fitVessel, design: look.value.design, accessory: look.value.accessory })
+    return
+  }
   gallery?.dispose()
   gallery = undefined
   galleryVesselId = undefined
+  shownKey = undefined
   turning.value = false
   if (currentStudy !== 'accessories' || previousStudy !== 'accessories') turn.value = 0
   const [min, max] = elevationRange.value
@@ -401,7 +411,7 @@ onUnmounted(() => {
 
           <div ref="stage" class="cup-stage" :class="{ 'single-preview': single }" :data-ready="ready">
             <canvas ref="canvas" class="cup-canvas" :class="{ 'is-hidden': still }" aria-hidden="true" />
-            <template v-for="(vessel, i) in shownVessels" :key="`${study}-${vessel.id}`">
+            <template v-for="(vessel, i) in shownVessels" :key="editing || emotive ? study : `${study}-${vessel.id}`">
               <div v-if="study === 'shapes' && i === culturalStart" class="cup-divider">
                 <p class="eyebrow">CULTURAL FORMS</p>
                 <h2>Cultural forms.</h2>
