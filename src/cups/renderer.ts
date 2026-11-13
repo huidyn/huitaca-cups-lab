@@ -275,14 +275,18 @@ export function createCupGallery(canvas: HTMLCanvasElement, views: CupView[], op
     entry.act = Math.max(0, Math.min(1, entry.act + (on ? dt : -dt) / ACT_BLEND))
     const played = options.act!(index, dt, { x: entry.tx, y: entry.ty, active: entry.awake })
     const weight = ease(entry.act)
+    // Survolée, même une tasse qui réfléchit suit d'abord le curseur, tout en gardant ses yeux et sa vapeur.
+    const aimWeight = entry.awake ? weight * 0.25 : weight
     const { head } = played.face
     entry.cup.root.rotation.set(
-      mix(bodyPitch(entry.by), bodyPitch(played.turn[1]) - head.pitch * RADIANS, weight),
-      mix(entry.bx * BODY_YAW, played.turn[0] * BODY_YAW + head.yaw * RADIANS, weight),
+      mix(bodyPitch(entry.by), bodyPitch(played.turn[1]) - head.pitch * RADIANS, aimWeight),
+      mix(entry.bx * BODY_YAW, played.turn[0] * BODY_YAW + head.yaw * RADIANS, aimWeight),
       head.roll * RADIANS * weight
     )
     entry.cup.root.position.y = played.lift * weight
-    entry.cup.pose(blendFace({ ...RESTING, gaze: [entry.x, entry.y] }, played.face, weight))
+    const face = blendFace({ ...RESTING, gaze: [entry.x, entry.y] }, played.face, weight)
+    face.gaze = [mix(entry.x, played.face.gaze[0], aimWeight), mix(entry.y, played.face.gaze[1], aimWeight)]
+    entry.cup.pose(face)
     entry.steamLevel = played.steam
     if (entry.steam) {
       entry.steam.group.position.y = entry.steamY + played.lift * weight
@@ -513,6 +517,7 @@ export function createCupGallery(canvas: HTMLCanvasElement, views: CupView[], op
 
   function pointer(event: PointerEvent) {
     if (turntable || reducedMotion.matches || event.pointerType === 'touch') return
+    if (!Number.isFinite(event.clientX) || !Number.isFinite(event.clientY)) return
     let changed = false
     pointerAt = event.timeStamp
     last = { x: event.clientX, y: event.clientY }
@@ -527,8 +532,14 @@ export function createCupGallery(canvas: HTMLCanvasElement, views: CupView[], op
   function aim(entry: typeof entries[number]) {
     if (!last) return false
     const box = entry.element.getBoundingClientRect()
-    const tx = Math.max(-1, Math.min(1, (last.x - box.left - box.width / 2) / 420))
-    const ty = Math.max(-1, Math.min(1, (box.top + box.height / 2 - last.y) / 300))
+    // En barre latérale, le regard part du visage réel de la tasse dans sa vignette, à son échelle :
+    // le curseur ne la réveille que sur sa rangée, donc à quelques dizaines de pixels autour d'elle.
+    const unit = box.height / (2 * framing.halfHeight)
+    const cx = box.left + box.width / 2 + (resting ? entry.cup.root.position.x * unit : 0)
+    const cy = box.top + box.height / 2 + (resting ? (framing.lift - entry.vessel.face.centerY) * unit : 0)
+    const u = (last.x - cx) / (resting && box.width ? box.width / 2 : 420)
+    const tx = Math.max(-1, Math.min(1, !resting || u <= 0 ? u : u < 1 ? u * 0.75 : 0.75 + (u - 1) * 0.05))
+    const ty = Math.max(-1, Math.min(1, (cy - last.y) / (resting && box.height ? box.height / 2 : 300)))
     const changed = tx !== entry.tx || ty !== entry.ty
     entry.tx = tx
     entry.ty = ty
@@ -567,6 +578,7 @@ export function createCupGallery(canvas: HTMLCanvasElement, views: CupView[], op
     }
   }
   window.addEventListener('pointermove', pointer, { passive: true })
+  window.addEventListener('pointerover', pointer, { passive: true })
   document.documentElement.addEventListener('pointerleave', reset)
   window.addEventListener('blur', reset)
   document.addEventListener('visibilitychange', visibility)
@@ -732,6 +744,7 @@ export function createCupGallery(canvas: HTMLCanvasElement, views: CupView[], op
       cancelAnimationFrame(frame)
       observer.disconnect()
       window.removeEventListener('pointermove', pointer)
+      window.removeEventListener('pointerover', pointer)
       document.documentElement.removeEventListener('pointerleave', reset)
       window.removeEventListener('blur', reset)
       document.removeEventListener('visibilitychange', visibility)

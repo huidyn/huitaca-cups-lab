@@ -95,7 +95,7 @@ describe('agents sidebar study', () => {
     expect(root.querySelector('.agent-still')?.getAttribute('src')).toMatch(/32-\d+$/)
     button('28 px').click()
     // Toutes les images, prises par lots de 8 : on attend la dernière.
-    await vi.waitFor(() => expect([...root.querySelectorAll('.agent-still')].every(img => /28-\d+$/.test(img.getAttribute('src')!))).toBe(true))
+    await vi.waitFor(() => expect([...root.querySelectorAll('.agent-still')].filter(img => /28-\d+$/.test(img.getAttribute('src')!))).toHaveLength(40))
     const asked = gallery.snapshot.mock.calls.length
     button('32 px').click()
     await vi.waitFor(() => expect(root.querySelector('.agent-still')?.getAttribute('src')).toMatch(/32-\d+$/))

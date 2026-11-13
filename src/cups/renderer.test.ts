@@ -108,6 +108,35 @@ describe('on-demand cup renderer', () => {
     expect(canvas.dataset.frames).toBe(frames)
   })
 
+  it('in resting mode, aims relative to the cup face at sidebar scale', () => {
+    gallery.dispose()
+    const render = vi.spyOn(WebGLRenderer.prototype, 'render')
+    const element = document.createElement('div')
+    vi.spyOn(element, 'getBoundingClientRect').mockReturnValue(new DOMRect(10, 100, 32, 32))
+    gallery = createCupGallery(canvas, [{ element, vessel: vessels.find(vessel => vessel.id === 'teacup')! }], {
+      resting: { x: 0.6, y: 0 }, frame: { lift: 1.5, halfHeight: 1.62 }
+    })
+    const settle = (x: number, y: number) => {
+      window.dispatchEvent(new PointerEvent('pointermove', { clientX: x, clientY: y, pointerType: 'mouse' }))
+      gallery.wake(0)
+      for (let i = 0; i < 120; i++) step()
+      return render.mock.calls.at(-1)![0].children[0]!.rotation
+    }
+    // À gauche de la tasse dans sa rangée : elle tourne franchement à gauche.
+    const left = settle(8, 123).y
+    expect(left).toBeLessThan(-0.18)
+    // En face de ses yeux (plus bas que le milieu de la boîte, réservée aux chapeaux) : droite et à plat.
+    const face = settle(24.2, 122.8)
+    expect(Math.abs(face.y)).toBeLessThan(0.02)
+    expect(Math.abs(face.x)).toBeLessThan(0.02)
+    // Au-dessus et au-dessous de ses yeux dans la même rangée : elle lève et baisse la tête.
+    expect(settle(24.2, 106).x).toBeLessThan(-0.1)
+    expect(settle(24.2, 138).x).toBeGreaterThan(0.07)
+    // À droite sur le nom de l'agent : elle regarde plus à droite qu'au repos.
+    expect(settle(42, 123).y).toBeGreaterThan(0.6 * 0.22)
+    expect(settle(120, 123).y).toBeGreaterThan(0.2)
+  })
+
   it('does not wake a cup with reduced motion', () => {
     gallery.dispose()
     media.matches = true
