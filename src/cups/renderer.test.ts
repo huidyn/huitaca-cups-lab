@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { WebGLRenderer } from 'three'
 import { vessels } from './catalogue'
 import { createCupGallery } from './renderer'
+import { createPerformer, type PointerState } from './personality'
 import * as accessories from './accessories'
 import * as berets from './beret'
 import * as teaTags from './tea-tag'
@@ -222,5 +223,49 @@ describe('on-demand cup renderer', () => {
     expect(pose()).toEqual(originalPose)
     expect(JSON.stringify(vessel)).toBe(original)
     expect(queue.size).toBe(0)
+  })
+
+  describe('a performing cup', () => {
+    it('plays every frame, hands the performer the cursor, and never rests', () => {
+      gallery.dispose()
+      const performer = createPerformer(1)
+      performer.setThinking(true)
+      const perform = vi.fn((dt: number, pointer: PointerState, still: boolean) => performer.step(dt, pointer, still))
+      gallery = createCupGallery(canvas, [{ element: canvas, vessel: vessels[0]! }], { perform })
+      step()
+      expect(perform).toHaveBeenCalledTimes(1)
+      expect(perform.mock.calls[0]![1]).toEqual({ x: 0, y: 0, active: false })
+      expect(perform.mock.calls[0]![2]).toBe(false)
+      expect(queue.size).toBe(1)
+      window.dispatchEvent(new PointerEvent('pointermove', { clientX: 600, clientY: 0, pointerType: 'mouse' }))
+      for (let i = 0; i < 30; i++) step()
+      expect(perform).toHaveBeenCalledTimes(31)
+      expect(perform.mock.calls.at(-1)![0]).toBeCloseTo(0.016, 6)
+      expect(perform.mock.calls.at(-1)![1]).toEqual({ x: 1, y: 0.5, active: true })
+      expect(perform.mock.results.at(-1)!.value.steam).toBeGreaterThan(0.5)
+      expect(queue.size).toBe(1)
+      // Le curseur sorti de la page n'est plus « à côté ».
+      document.documentElement.dispatchEvent(new Event('pointerleave'))
+      step()
+      expect(perform.mock.calls.at(-1)![1]).toEqual({ x: 0, y: 0, active: false })
+    })
+
+    it('holds the pose and stops the loop when motion is reduced, until told to refresh', () => {
+      gallery.dispose()
+      media.matches = true
+      const performer = createPerformer(1)
+      const perform = vi.fn((dt: number, pointer: PointerState, still: boolean) => performer.step(dt, pointer, still))
+      gallery = createCupGallery(canvas, [{ element: canvas, vessel: vessels[0]! }], { perform })
+      step()
+      expect(perform).toHaveBeenLastCalledWith(0, { x: 0, y: 0, active: false }, true)
+      expect(queue.size).toBe(0)
+      performer.express('happy')
+      gallery.refresh()
+      expect(queue.size).toBe(1)
+      step()
+      expect(perform).toHaveBeenCalledTimes(2)
+      expect(perform.mock.results.at(-1)!.value.expression).toBe('happy')
+      expect(queue.size).toBe(0)
+    })
   })
 })

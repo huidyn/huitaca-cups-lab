@@ -1,6 +1,6 @@
 import {
-  BufferGeometry, CanvasTexture, CatmullRomCurve3, ClampToEdgeWrapping, Color, DoubleSide,
-  Float32BufferAttribute, Group, LatheGeometry, Mesh, MeshBasicMaterial, RepeatWrapping,
+  BufferAttribute, BufferGeometry, CanvasTexture, CatmullRomCurve3, ClampToEdgeWrapping, Color, DoubleSide,
+  Group, LatheGeometry, Mesh, MeshBasicMaterial, RepeatWrapping,
   ShaderMaterial, Texture, TubeGeometry, Vector2, Vector3
 } from 'three'
 import type { Point2, VesselDefinition } from './types'
@@ -13,6 +13,11 @@ import { createTeaTag, fitTeaTag } from './tea-tag'
 import { createScarf, fitScarf } from './scarf'
 import { createHeadphones, fitHeadphones } from './headphones'
 import { bandLayout } from './pattern'
+import { EYE_COLUMNS, EYE_POINTS, EYE_ROWS, eyeShape, type FacePose, facePose } from './expressions'
+
+// Course du regard sur la paroi, en unités de tasse : les yeux bougent plus que la tasse ne tourne.
+// Plus de course vers le haut que vers le bas : l'écharpe passe juste sous les yeux.
+export const GAZE_TRAVEL = { x: 0.11, up: 0.12, down: 0.07 }
 
 export function radiusAtY(outline: Point2[], y: number): number {
   for (let i = 1; i < outline.length; i++) {
@@ -208,50 +213,45 @@ export function createCup(definition: VesselDefinition, options: { pattern?: boo
 
   const face = definition.face
   const outline = definition.parts.find(p => p.id === face.surface)!.outline
-  const w = face.eyeWidth / 2
-  const h = face.eyeHeight / 2 - w
+  // La paroi ne porte des yeux que là où elle monte : au-delà, les sommets s'arrêtent au bord.
+  const rising = outline.slice(1).flatMap((point, i) => point[1] > outline[i]![1] ? [outline[i]![1], point[1]] : [])
+  const wallBottom = Math.min(...rising)
+  const wallTop = Math.max(...rising)
   // Une grille suit aussi la courbure ENTRE les bords. Un simple polygone
   // triangule traversait la paroi convexe de la tasse a the.
-  const columns = 8
-  const rows = 32
-  const vertices: number[] = []
   const indices: number[] = []
-  for (let row = 0; row <= rows; row++) {
-    const y = (row / rows - 0.5) * face.eyeHeight
-    const capY = Math.max(0, Math.abs(y) - h)
-    const halfWidth = Math.sqrt(Math.max(0, w * w - capY * capY))
-    for (let col = 0; col <= columns; col++) {
-      vertices.push((col / columns * 2 - 1) * halfWidth, y, 0)
-      if (row < rows && col < columns) {
-        const a = row * (columns + 1) + col
-        const b = a + columns + 1
-        indices.push(a, a + 1, b, a + 1, b + 1, b)
-      }
+  for (let row = 0; row < EYE_ROWS; row++) {
+    for (let col = 0; col < EYE_COLUMNS; col++) {
+      const a = row * (EYE_COLUMNS + 1) + col
+      const b = a + EYE_COLUMNS + 1
+      indices.push(a, a + 1, b, a + 1, b + 1, b)
     }
   }
 
   const eyes = [-1, 1].map(side => {
     const geometry = new BufferGeometry()
-    geometry.setAttribute('position', new Float32BufferAttribute(vertices, 3))
+    geometry.setAttribute('position', new BufferAttribute(new Float32Array(EYE_POINTS * 3), 3))
     geometry.setIndex(indices)
-    const source = Float32Array.from(vertices)
     const mesh = new Mesh(geometry, material(face.color))
     mesh.name = side < 0 ? 'left-eye' : 'right-eye'
     root.add(mesh)
-    return { geometry, source, side }
+    return { geometry, shape: new Float32Array(EYE_POINTS * 2), side }
   })
 
-  function look(x: number, y: number) {
-    // Le regard reste dans la zone JSON, y compris le bord des capsules.
-    const travelX = Math.max(0, (face.width - face.separation - face.eyeWidth) / 2)
-    const travelY = Math.max(0, (face.height - face.eyeHeight) / 2)
-    const dx = Math.max(-1, Math.min(1, x)) * Math.min(0.11, travelX)
-    const dy = Math.max(-1, Math.min(1, y)) * Math.min(0.07, travelY)
-    for (const eye of eyes) {
+  // Le regard reste dans la zone JSON, y compris le bord des capsules au repos.
+  const travelX = Math.min(GAZE_TRAVEL.x, Math.max(0, (face.width - face.separation - face.eyeWidth) / 2))
+  const roomY = Math.max(0, (face.height - face.eyeHeight) / 2)
+
+  function pose(expression: FacePose) {
+    const dx = Math.max(-1, Math.min(1, expression.gaze[0])) * travelX
+    const gazeY = Math.max(-1, Math.min(1, expression.gaze[1]))
+    const dy = gazeY * Math.min(gazeY > 0 ? GAZE_TRAVEL.up : GAZE_TRAVEL.down, roomY)
+    eyes.forEach((eye, index) => {
+      eyeShape(expression.eyes[index]!, eye.side, face.eyeWidth, face.eyeHeight, eye.shape)
       const position = eye.geometry.attributes.position!
       for (let i = 0; i < position.count; i++) {
-        const u = eye.source[i * 3]! + eye.side * face.separation / 2 + dx
-        const v = eye.source[i * 3 + 1]! + face.centerY + dy
+        const u = eye.shape[i * 2]! + eye.side * face.separation * expression.gap / 2 + dx
+        const v = Math.max(wallBottom, Math.min(wallTop, eye.shape[i * 2 + 1]! + face.centerY + dy))
         const r = radiusAtY(outline, v)
         const angle = u / r
         // Chaque sommet suit la paroi : pas de panneau blanc face a la camera.
@@ -259,13 +259,27 @@ export function createCup(definition: VesselDefinition, options: { pattern?: boo
       }
       position.needsUpdate = true
       eye.geometry.computeBoundingSphere()
-    }
+    })
   }
+
+  const resting = facePose()
+  function look(x: number, y: number) {
+    resting.gaze = [x, y]
+    pose(resting)
+  }
+
+  // Le point le plus haut de la tasse, couvercle compris : c'est de là que monte la vapeur.
+  const topY = Math.max(
+    ...definition.parts.flatMap(part => part.outline.map(point => point[1])),
+    definition.lid ? definition.lid.baseY + definition.lid.height + definition.lid.rise : 0
+  )
 
   look(0, 0)
   return {
     root,
+    topY,
     look,
+    pose,
     setColors(colors: Record<string, string>) {
       const update = (material: MeshBasicMaterial, slot: string) => {
         if (colors[slot]) material.color.set(colors[slot])

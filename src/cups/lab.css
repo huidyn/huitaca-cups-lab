@@ -109,6 +109,42 @@ a { color: inherit; }
 .editor-text-tile { min-height: 48px; }
 .editor-swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(44px, 1fr)); gap: 10px; }
 .editor-swatch { display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; border: 1px solid transparent; border-radius: 50%; cursor: pointer; }
+.expression-options { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.expression-tile { flex-direction: column; gap: 2px; padding: 8px 4px 9px; font-size: 11px; color: var(--lab-muted); border-radius: 10px; transition: background-color 0.15s, color 0.15s; }
+.expression-tile.is-selected { color: var(--lab-text); background: var(--lab-active); }
+.expression-glyph { display: block; width: 100%; max-width: 64px; aspect-ratio: 5 / 3; fill: currentColor; }
+.personality-options { display: grid; gap: 8px; }
+.personality-tile { justify-content: flex-start; gap: 14px; min-height: 0; padding: 10px 14px 10px 8px; border-radius: 10px; font-size: 13px; text-align: left; }
+.personality-tile .expression-glyph { width: 56px; flex-shrink: 0; }
+.personality-tile small { display: block; margin-top: 4px; color: var(--lab-muted); font-size: 11px; line-height: 1.45; }
+.chat-demo { margin: 28px 0; padding-top: 24px; border-top: 1px solid var(--lab-border); }
+.editor-panel > .editor-section + .editor-section, .chat-demo + .editor-section { margin-top: 28px; }
+.chat-heading { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.chat-heading .editor-group { margin: 0; }
+.chat-heading button { border: 1px solid var(--lab-border); background: transparent; color: var(--lab-text); border-radius: 5px; padding: 6px 12px; font-size: 11px; cursor: pointer; }
+.chat-heading button:hover { border-color: var(--lab-text); }
+.chat-thread { display: flex; flex-direction: column; gap: 8px; min-height: 108px; padding: 14px; border: 1px solid var(--lab-border); border-radius: 14px; }
+.chat-bubble { max-width: 82%; margin: 0; padding: 9px 13px; border-radius: 16px; font-size: 13px; line-height: 1.4; }
+.chat-user { align-self: flex-end; background: var(--lab-text); color: var(--lab-bg); border-bottom-right-radius: 5px; }
+.chat-agent { align-self: flex-start; background: var(--lab-active); border-bottom-left-radius: 5px; }
+.chat-thinking { padding: 6px 12px 4px; }
+.chat-empty { margin: auto; color: var(--lab-muted); font-size: 12px; }
+/* La vapeur dans le fil : trois rubans qui montent, à la place des trois points. */
+.steam-indicator { display: block; width: 30px; height: 24px; fill: none; stroke: var(--lab-muted); stroke-width: 2.4; stroke-linecap: round; }
+.steam-indicator path { stroke-dasharray: 0.55 1.45; stroke-dashoffset: 0.55; animation: steam-rise 1.7s cubic-bezier(0.45, 0, 0.3, 1) infinite; }
+.steam-indicator path:nth-child(2) { animation-delay: 0.28s; }
+.steam-indicator path:nth-child(3) { animation-delay: 0.56s; }
+@keyframes steam-rise {
+  0% { stroke-dashoffset: 0.55; opacity: 0; }
+  20% { opacity: 1; }
+  70% { opacity: 1; }
+  100% { stroke-dashoffset: -1; opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .steam-indicator path { animation: none; stroke-dasharray: none; }
+}
+.cup-mini { position: absolute; left: 0; bottom: 0; display: flex; align-items: center; gap: 10px; color: var(--lab-muted); font-size: 10px; letter-spacing: 0.4px; }
+.cup-mini .cup-viewport { width: 48px; }
 .design-swatch { display: block; width: 72px; height: 50px; flex-shrink: 0; border-radius: 4px; }
 .cup-viewport.is-turntable { cursor: grab; touch-action: none; border-radius: 8px; }
 .cup-viewport.is-turntable:active { cursor: grabbing; }

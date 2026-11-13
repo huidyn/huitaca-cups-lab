@@ -4,6 +4,8 @@ import type { CupDesign } from './designs'
 import { bandLayout, designSvg, MASK_INKS, maskWidth, rasterizeSvg } from './pattern'
 import type { VesselDefinition } from './types'
 import type { AccessoryId } from './accessories'
+import type { Performance, PointerState } from './personality'
+import { createSteam } from './steam'
 
 export interface CupView {
   element: HTMLElement
@@ -29,6 +31,23 @@ export interface GalleryOptions {
   initialTurn?: number
   onTurn?: (degrees: number) => void
   frame?: CupFrame
+  // Une tasse qui joue : expressions, clignements, vapeur. Appelée à chaque image.
+  perform?: (dt: number, pointer: PointerState, still: boolean) => Performance
+}
+
+// La tasse suit le curseur moins que ses yeux, et plus lentement : c'est le regard qui mène.
+export const DEFAULT_ELEVATION = 8
+const BODY_YAW = 0.22
+const BODY_PITCH_UP = 0.13
+const BODY_PITCH_DOWN = 0.085
+const EYE_RATE = 14
+const BODY_RATE = 5
+// Sans mouvement depuis ce délai, le curseur n'est plus « à côté ».
+const POINTER_IDLE = 3500
+const RADIANS = Math.PI / 180
+
+function bodyPitch(y: number) {
+  return -y * (y > 0 ? BODY_PITCH_UP : BODY_PITCH_DOWN)
 }
 
 // Petite marge de résolution, avant le plafond GPU ; les mipmaps filtrent les côtés fuyants.
@@ -74,14 +93,22 @@ export function createCupGallery(canvas: HTMLCanvasElement, views: CupView[], op
     pivot.position.x = vessel.handle ? -0.18 : 0
     scene.add(pivot)
     const camera = new OrthographicCamera(-1.6, 1.6, framing.halfHeight, -framing.halfHeight, 0.1, 50)
-    return { element, vessel, design, maskWidth: 0, cup, scene, camera, x: 0, y: 0, tx: 0, ty: 0 }
+    // La vapeur reste face à la caméra : elle ne tourne pas avec la tasse.
+    const steam = options.perform ? createSteam(Math.min(1, framing.lift + framing.halfHeight - 0.1 - cup.topY)) : undefined
+    if (steam) {
+      steam.group.position.set(pivot.position.x, cup.topY - framing.lift + 0.07, 0)
+      scene.add(steam.group)
+    }
+    return { element, vessel, design, maskWidth: 0, cup, scene, camera, steam, steamY: steam?.group.position.y ?? 0, x: 0, y: 0, bx: 0, by: 0, tx: 0, ty: 0 }
   })
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)')
   let frame = 0
   let previousTime = 0
   let turnTime = 0
   let turning = false
-  let elevation = 16
+  let elevation = DEFAULT_ELEVATION
+  let pointerAt = -Infinity
+  let clock = 0
   let disposed = false
   let frames = 0
   let yaw = (options.initialTurn ?? 0) * Math.PI / 180
@@ -151,20 +178,48 @@ export function createCupGallery(canvas: HTMLCanvasElement, views: CupView[], op
       else previousTime = 0
       return
     }
+    if (options.perform) {
+      const still = reducedMotion.matches
+      const first = entries[0]!
+      clock += still ? 0 : dt
+      const act = options.perform(still ? 0 : dt, { x: first.tx, y: first.ty, active: !still && time - pointerAt < POINTER_IDLE }, still)
+      for (const entry of entries) {
+        const { head } = act.face
+        entry.cup.root.rotation.set(
+          bodyPitch(act.turn[1]) - head.pitch * RADIANS,
+          act.turn[0] * BODY_YAW + head.yaw * RADIANS + (animate ? Math.sin(turnTime * 0.5) * 0.22 : 0),
+          head.roll * RADIANS
+        )
+        entry.cup.root.position.y = act.lift
+        entry.cup.pose(act.face)
+        if (entry.steam) {
+          entry.steam.group.position.y = entry.steamY + act.lift
+          entry.steam.update(clock, act.steam)
+        }
+      }
+      draw()
+      // Une tasse qui joue ne s'arrête jamais, sauf si on a demandé moins de mouvement.
+      if (still) previousTime = 0
+      else invalidate()
+      return
+    }
     for (const entry of entries) {
       const tx = reducedMotion.matches ? 0 : entry.tx
       const ty = reducedMotion.matches ? 0 : entry.ty
-      const blend = reducedMotion.matches ? 1 : 1 - Math.exp(-dt * 10)
-      entry.x += (tx - entry.x) * blend
-      entry.y += (ty - entry.y) * blend
-      if (Math.abs(tx - entry.x) + Math.abs(ty - entry.y) < 0.001) {
-        entry.x = tx
-        entry.y = ty
+      const quick = reducedMotion.matches ? 1 : 1 - Math.exp(-dt * EYE_RATE)
+      const slow = reducedMotion.matches ? 1 : 1 - Math.exp(-dt * BODY_RATE)
+      entry.x += (tx - entry.x) * quick
+      entry.y += (ty - entry.y) * quick
+      entry.bx += (tx - entry.bx) * slow
+      entry.by += (ty - entry.by) * slow
+      if (Math.abs(tx - entry.bx) + Math.abs(ty - entry.by) < 0.001) {
+        entry.x = entry.bx = tx
+        entry.y = entry.by = ty
       } else {
         moving = true
       }
-      entry.cup.root.rotation.y = entry.x * 0.22 + (animate ? Math.sin(turnTime * 0.5) * 0.22 : 0)
-      entry.cup.root.rotation.x = -entry.y * 0.065
+      entry.cup.root.rotation.y = entry.bx * BODY_YAW + (animate ? Math.sin(turnTime * 0.5) * 0.22 : 0)
+      entry.cup.root.rotation.x = bodyPitch(entry.by)
       entry.cup.look(entry.x, entry.y)
     }
     draw()
@@ -213,6 +268,7 @@ export function createCupGallery(canvas: HTMLCanvasElement, views: CupView[], op
   function pointer(event: PointerEvent) {
     if (turntable || reducedMotion.matches || event.pointerType === 'touch') return
     let changed = false
+    pointerAt = event.timeStamp
     for (const entry of entries) {
       const box = entry.element.getBoundingClientRect()
       const tx = Math.max(-1, Math.min(1, (event.clientX - box.left - box.width / 2) / 420))
@@ -226,6 +282,7 @@ export function createCupGallery(canvas: HTMLCanvasElement, views: CupView[], op
 
   function reset() {
     for (const entry of entries) entry.tx = entry.ty = 0
+    pointerAt = -Infinity
     invalidate()
   }
 
@@ -274,6 +331,8 @@ export function createCupGallery(canvas: HTMLCanvasElement, views: CupView[], op
       turnTime = 0
       invalidate()
     },
+    // À appeler quand ce que joue la tasse change alors que rien ne bouge (mouvement réduit).
+    refresh: invalidate,
     setElevation(value: number) {
       elevation = value
       invalidate()
@@ -295,7 +354,10 @@ export function createCupGallery(canvas: HTMLCanvasElement, views: CupView[], op
         element.removeEventListener('lostpointercapture', release)
         element.removeEventListener('keydown', key)
       }
-      entries.forEach(entry => entry.cup.dispose())
+      entries.forEach(entry => {
+        entry.cup.dispose()
+        entry.steam?.dispose()
+      })
       renderer.dispose()
     }
   }

@@ -7,15 +7,39 @@ import { bandLayout, designSvg } from './pattern'
 import type { createCupGallery } from './renderer'
 import type { AccessoryId } from './accessories'
 import { collectionFor, DEFAULT_COLOUR, defaultDesign, editorLook, PLAIN } from './editor'
+import { EXPRESSION_BY_ID, expressionGlyph, type ExpressionId, EXPRESSIONS } from './expressions'
+import { createPerformer, DEFAULT_PERSONALITY, PERSONALITIES, type PersonalityId } from './personality'
 import './lab.css'
 
-type Study = 'shapes' | 'colours' | 'designs' | 'accessories' | 'editor'
+type Study = 'shapes' | 'colours' | 'designs' | 'accessories' | 'editor' | 'expressions' | 'personalities'
 const STUDIES: Record<Study, { number: string; label: string; eyebrow: string; title: string; description: string }> = {
   shapes: { number: '01', label: 'Shapes', eyebrow: 'STUDY 01 / FORM', title: 'A little character.', description: 'Eighteen shapes. Two eyes. Nothing extra.' },
   colours: { number: '02', label: 'Colours', eyebrow: 'STUDY 02 / COLOUR', title: 'Find its colour.', description: 'Twelve forms. Twelve colours. Pick a cup to try them.' },
   designs: { number: '03', label: 'Designs', eyebrow: 'STUDY 03 / PATTERN', title: 'Give it a pattern.', description: 'Choose a culture. Three patterns per vessel. Drag the cup to turn it.' },
   accessories: { number: '04', label: 'Accessories', eyebrow: 'STUDY 04 / ACCESSORIES', title: 'Find the right fit.', description: 'Choose any cup. We’ll add accessories one at a time.' },
-  editor: { number: '05', label: 'Editor', eyebrow: 'STUDY 05 / EDITOR', title: 'Make it yours.', description: 'A shape, a colour or a pattern, and an accessory. Everything follows your cursor.' }
+  editor: { number: '05', label: 'Editor', eyebrow: 'STUDY 05 / EDITOR', title: 'Make it yours.', description: 'A shape, a colour or a pattern, and an accessory. Everything follows your cursor.' },
+  expressions: { number: '06', label: 'Expressions', eyebrow: 'STUDY 06 / EXPRESSION', title: 'Two eyes say it all.', description: 'Sixteen expressions an agent can pick from, on the cup from your editor.' },
+  personalities: { number: '07', label: 'Personalities', eyebrow: 'STUDY 07 / PERSONALITY', title: 'Same feeling, its own way.', description: 'The agent picks the expression. The personality decides how it is played.' }
+}
+// Une conversation jouée en boucle : écouter, réfléchir, répondre avec une expression.
+const EXCHANGES: { user: string; expression: ExpressionId; reply: string }[] = [
+  { user: 'I got the job!', expression: 'delighted', reply: 'That is wonderful news. Congratulations!' },
+  { user: 'Can you plan my week?', expression: 'focused', reply: 'On it. Three work blocks, two real breaks.' },
+  { user: 'Guess what I found in the attic.', expression: 'curious', reply: 'Go on…' },
+  { user: 'Actually, cancel all of it.', expression: 'surprised', reply: 'Oh. All of it?' },
+  { user: 'My flight got delayed again.', expression: 'sad', reply: 'That is rough. Let’s find you another one.' },
+  { user: 'Is this a good deal?', expression: 'skeptical', reply: 'Hmm. The fine print says otherwise.' },
+  { user: 'You are the best.', expression: 'shy', reply: 'Oh. Thank you.' },
+  { user: 'We shipped it!', expression: 'excited', reply: 'Yes! Tell me everything.' },
+  { user: 'Does this sentence make sense?', expression: 'confused', reply: 'Not quite. Which part is the verb?' },
+  { user: 'Thanks, that fixed it.', expression: 'happy', reply: 'Glad it worked.' }
+]
+type Phase = 'idle' | 'listening' | 'thinking' | 'replying'
+const PHASES: Record<Phase, { next: Phase; ms: number }> = {
+  idle: { next: 'listening', ms: 2600 },
+  listening: { next: 'thinking', ms: 1800 },
+  thinking: { next: 'replying', ms: 2800 },
+  replying: { next: 'idle', ms: 3600 }
 }
 const ACCESSORIES: { id: AccessoryId; name: string }[] = [
   { id: 'paintbrush', name: 'Paintbrush' },
@@ -58,6 +82,49 @@ const editorColourId = ref(DEFAULT_COLOUR)
 const editorDesignId = ref(defaultDesign(vessels[0]!.id))
 const editorAccessory = ref<AccessoryId | typeof PLAIN>(PLAIN)
 const editorCollection = computed(() => collectionFor(editorCupId.value))
+let gallery: ReturnType<typeof createCupGallery> | undefined
+// Les pages 06 et 07 montrent la tasse de l'éditeur, en train de jouer.
+const expressionId = ref<ExpressionId>('neutral')
+const personalityId = ref<PersonalityId>(DEFAULT_PERSONALITY)
+const playing = ref(true)
+const phase = ref<Phase>('idle')
+const exchange = ref(-1)
+const performer = createPerformer()
+const glyphs = Object.fromEntries(EXPRESSIONS.map(option => [option.id, expressionGlyph(option)]))
+const restGlyphs = Object.fromEntries(PERSONALITIES.map(option => [option.id, expressionGlyph(option.rest)]))
+const emotive = computed(() => study.value === 'expressions' || study.value === 'personalities')
+const conversing = computed(() => study.value === 'personalities' && playing.value)
+const isThinking = computed(() => conversing.value && phase.value === 'thinking')
+// Ce que l'agent a choisi de montrer à cet instant.
+const acted = computed<ExpressionId>(() => !conversing.value ? expressionId.value
+  : phase.value === 'listening' ? 'attentive' : phase.value === 'replying' ? EXCHANGES[exchange.value]!.expression : 'neutral')
+const actedName = computed(() => isThinking.value ? 'Thinking' : EXPRESSION_BY_ID.get(acted.value)!.name)
+let phaseTimer: ReturnType<typeof setTimeout> | undefined
+watch([conversing, phase], () => {
+  clearTimeout(phaseTimer)
+  if (!conversing.value) return
+  phaseTimer = setTimeout(() => {
+    const next = PHASES[phase.value].next
+    if (next === 'listening') exchange.value = (exchange.value + 1) % EXCHANGES.length
+    phase.value = next
+  }, PHASES[phase.value].ms)
+}, { immediate: true })
+watch([study, acted, isThinking, personalityId], () => {
+  // La planche des expressions tient la pose, dans la personnalité par défaut.
+  performer.setPersonality(study.value === 'personalities' ? personalityId.value : DEFAULT_PERSONALITY)
+  performer.setIdle(study.value === 'personalities')
+  performer.express(acted.value)
+  performer.setThinking(isThinking.value)
+  gallery?.refresh()
+}, { immediate: true })
+function tryExpression(id: ExpressionId) {
+  expressionId.value = id
+  playing.value = false
+}
+function toggleConversation() {
+  playing.value = !playing.value
+  if (playing.value) phase.value = 'idle'
+}
 // Chaque tasse repart de son option par défaut : une tasse culturelle ne garde pas la
 // couleur de la précédente, et le motif d'une autre tasse ne s'applique pas. D'une tasse
 // ordinaire à une autre, la couleur choisie reste, pour l'essayer sur plusieurs formes.
@@ -68,7 +135,7 @@ watch(editorCupId, () => {
 const look = computed(() => editorLook({ cupId: editorCupId.value, colourId: editorColourId.value, designId: editorDesignId.value, accessory: editorAccessory.value }))
 const BUILT_ACCESSORIES: AccessoryId[] = ['paintbrush', 'leaf', 'beret', 'tea-bag', 'headphones', 'scarf']
 // Seuls les accessoires déjà modélisés apparaissent ; les autres laissent la tasse nue.
-const shownAccessory = computed(() => study.value === 'editor' ? look.value.accessory
+const shownAccessory = computed(() => study.value === 'editor' || emotive.value ? look.value.accessory
   : study.value === 'accessories' && BUILT_ACCESSORIES.includes(accessoryId.value) && !still.value ? accessoryId.value : undefined)
 const accessoryCup = computed(() => vessels.find(vessel => vessel.id === accessoryCupId.value)!)
 const cupId = computed({
@@ -80,24 +147,23 @@ const cupId = computed({
   }
 })
 const shownVessels = computed(() => study.value === 'shapes' ? vessels : study.value === 'colours' ? [preview.value]
-  : study.value === 'designs' ? [designVessel.value] : study.value === 'editor' ? [look.value.vessel] : [accessoryCup.value])
+  : study.value === 'designs' ? [designVessel.value] : study.value === 'editor' || emotive.value ? [look.value.vessel] : [accessoryCup.value])
 const single = computed(() => study.value !== 'shapes')
 const hasCupPicker = computed(() => study.value === 'colours' || study.value === 'accessories')
 const editing = computed(() => study.value === 'editor')
 const manual = computed(() => study.value === 'designs' || study.value === 'accessories')
 const turning = ref(false)
-const elevation = ref(16)
+const elevation = ref(8)
 const turn = ref(0)
 const fallback = ref(false)
 const reduced = ref(false)
 const ready = ref(false)
 // La platine reste en 3D avec mouvement réduit : rien ne bouge sans la main de l'utilisateur.
-const still = computed(() => fallback.value || (reduced.value && !manual.value && !editing.value))
+const still = computed(() => fallback.value || (reduced.value && !manual.value && !editing.value && !emotive.value))
 const elevationRange = computed(() => manual.value ? [-20, 60] : [0, 32])
 const everydayVessels = vessels.filter(vessel => !vessel.heritage)
 const culturalVessels = vessels.filter(vessel => vessel.heritage)
 const culturalStart = vessels.findIndex(vessel => vessel.heritage)
-let gallery: ReturnType<typeof createCupGallery> | undefined
 let galleryVesselId: string | undefined
 let disposed = false
 let media: MediaQueryList
@@ -134,14 +200,17 @@ async function syncMotion() {
       const elements = [...stage.value.querySelectorAll<HTMLElement>('.cup-viewport')]
       const designs = study.value === 'designs'
       const accessories = study.value === 'accessories'
-      const editor = study.value === 'editor'
-      gallery = createCupGallery(canvas.value, shownVessels.value.map((vessel, i) => ({
+      const editor = study.value === 'editor' || emotive.value
+      // La tasse qui joue est dessinée deux fois : en grand, et à la taille de la barre latérale.
+      const cups = emotive.value ? elements.map(() => look.value.vessel) : shownVessels.value
+      gallery = createCupGallery(canvas.value, cups.map((vessel, i) => ({
         vessel, element: elements[i]!, fitVessel: editor ? look.value.fitVessel : undefined,
         design: designs ? design.value : editor ? look.value.design : undefined,
         accessory: accessories || editor ? shownAccessory.value : undefined
       })), {
         turntable: manual.value, initialTurn: accessories ? turn.value : 0, onTurn: degrees => { turn.value = degrees },
-        frame: accessories || editor ? ACCESSORY_FRAME : undefined
+        frame: accessories || editor ? ACCESSORY_FRAME : undefined,
+        perform: emotive.value ? (dt, pointer, motionless) => performer.step(dt, pointer, motionless) : undefined
       })
       galleryVesselId = designs ? designVessel.value.id : undefined
       gallery.setElevation(elevation.value)
@@ -163,17 +232,17 @@ watch(design, () => {
 // Dans l'éditeur, la scène n'est reconstruite que si la structure change ; une autre
 // couleur ou un autre motif de la même tasse se règle en place.
 watch(() => look.value.vessel.colors, colors => {
-  if (study.value === 'editor' && !look.value.design) gallery?.setColors(0, colors)
+  if ((study.value === 'editor' || emotive.value) && !look.value.design) gallery?.setColors(0, colors)
 })
 watch(() => look.value.design, current => {
-  if (study.value === 'editor' && current) gallery?.setDesign(0, current)
+  if ((study.value === 'editor' || emotive.value) && current) gallery?.setDesign(0, current)
 })
 watch([study, cultureId, cupId, shownAccessory, () => look.value.key], async ([currentStudy, currentCulture, currentCup, currentAccessory, currentKey], [previousStudy, previousCulture, previousCup, previousAccessory, previousKey]) => {
   if (currentStudy === previousStudy &&
       !(currentStudy === 'designs' && currentCulture !== previousCulture) &&
       !((currentStudy === 'colours' || currentStudy === 'accessories') && currentCup !== previousCup) &&
       !(currentStudy === 'accessories' && currentAccessory !== previousAccessory) &&
-      !(currentStudy === 'editor' && currentKey !== previousKey)) return
+      !((currentStudy === 'editor' || currentStudy === 'expressions' || currentStudy === 'personalities') && currentKey !== previousKey)) return
   gallery?.dispose()
   gallery = undefined
   galleryVesselId = undefined
@@ -205,13 +274,14 @@ function editorLabel(vessel: typeof vessels[number]) {
 
 function label(vessel: typeof vessels[number]) {
   if (study.value === 'editor') return editorLabel(vessel)
+  if (emotive.value) return `${editorLabel(vessel)}, ${isThinking.value ? 'thinking, with steam rising' : `looking ${actedName.value.toLowerCase()}`}`
   if (study.value === 'designs') return `${vessel.name} with the ${design.value.name.toLowerCase()} pattern, ${collection.value.colorDescription}, turned ${turn.value} degrees`
   if (study.value === 'accessories') return `${vessel.name}, grey with ${shownAccessory.value ? `a ${shownAccessory.value === 'headphones' ? 'pair of headphones' : ACCESSORIES.find(option => option.id === shownAccessory.value)!.name.toLowerCase()}` : 'no accessories'}${still.value ? '' : `, turned ${turn.value} degrees`}`
   return `${vessel.name}, ${study.value === 'shapes' ? 'grey' : colour.value.name} with ${vessel.colors.eyes === '#1c1c1a' ? 'dark' : 'white'} eyes${vessel.lid || vessel.parts.some(part => part.id === 'lid') ? ' and a lid' : ' and a dark interior'}`
 }
 
 function stillSource(vessel: typeof vessels[number]) {
-  if (study.value === 'shapes' || study.value === 'accessories' || study.value === 'editor') return `/cups/stills/${vessel.id}.png`
+  if (study.value === 'shapes' || study.value === 'accessories' || study.value === 'editor' || emotive.value) return `/cups/stills/${vessel.id}.png`
   if (study.value === 'colours') return `/cups/stills/palette/${vessel.id === 'mug' ? '' : `${vessel.id}/`}${selected.value}.png`
   return `/cups/stills/designs/${designId.value}.png`
 }
@@ -227,6 +297,7 @@ onMounted(() => {
 onUnmounted(() => {
   disposed = true
   media?.removeEventListener('change', syncMotion)
+  clearTimeout(phaseTimer)
   gallery?.dispose()
 })
 </script>
@@ -256,7 +327,7 @@ onUnmounted(() => {
           <p class="study-description">{{ STUDIES[study].description }}</p>
         </div>
 
-        <div :class="{ 'colour-workspace': single, 'cup-picker-workspace': hasCupPicker, 'editor-workspace': editing }">
+        <div :class="{ 'colour-workspace': single, 'cup-picker-workspace': hasCupPicker, 'editor-workspace': editing || emotive }">
           <label v-if="hasCupPicker" class="culture-control cup-control">Cup
             <select v-model="cupId" aria-label="Cup">
               <optgroup label="Everyday forms">
@@ -288,11 +359,16 @@ onUnmounted(() => {
                   <template v-else-if="study === 'colours'">{{ vessel.name }} · {{ colour.name }}</template>
                   <template v-else-if="study === 'designs'">{{ vessel.name }} · {{ design.name }}</template>
                   <template v-else-if="study === 'editor'">{{ vessel.name }}</template>
+                  <template v-else-if="emotive">{{ vessel.name }} · {{ actedName }}</template>
                   <template v-else>{{ vessel.name }}</template>
                   <span v-if="vessel.heritage" class="cup-origin">{{ vessel.heritage.origin }}</span>
                 </figcaption>
               </figure>
             </template>
+            <div v-if="emotive && !still" class="cup-mini">
+              <div class="cup-viewport" role="img" aria-label="The same cup at sidebar size, 48 pixels" />
+              <span>48 px</span>
+            </div>
           </div>
 
           <fieldset v-if="study === 'colours'" class="palette-picker colour-picker">
@@ -387,6 +463,51 @@ onUnmounted(() => {
             </fieldset>
           </div>
 
+          <div v-if="emotive" class="editor-panel">
+            <fieldset v-if="study === 'personalities'" class="palette-picker editor-section">
+              <legend>Personality</legend>
+              <div class="personality-options">
+                <label v-for="option in PERSONALITIES" :key="option.id" class="editor-tile personality-tile" :class="{ 'is-selected': personalityId === option.id }">
+                  <input v-model="personalityId" type="radio" name="personality" :value="option.id" :aria-label="option.name" />
+                  <svg class="expression-glyph" viewBox="0 0 100 60" aria-hidden="true"><polygon v-for="(points, i) in restGlyphs[option.id]" :key="i" :points="points" /></svg>
+                  <span>{{ option.name }}<small>{{ option.note }}</small></span>
+                </label>
+              </div>
+            </fieldset>
+
+            <div v-if="study === 'personalities'" class="chat-demo">
+              <div class="chat-heading">
+                <p class="editor-group">In a conversation</p>
+                <button type="button" :aria-pressed="playing" @click="toggleConversation">{{ playing ? 'Pause' : 'Play' }}</button>
+              </div>
+              <div class="chat-thread" :data-phase="conversing ? phase : 'paused'">
+                <p v-if="exchange >= 0" class="chat-bubble chat-user">{{ EXCHANGES[exchange]!.user }}</p>
+                <p v-if="isThinking" class="chat-bubble chat-agent chat-thinking">
+                  <svg class="steam-indicator" viewBox="0 0 30 24" role="img" aria-label="Thinking">
+                    <path pathLength="1" d="M7 21C4 17 10 14 7 10S10 5 7 3" />
+                    <path pathLength="1" d="M15 21C12 17 18 14 15 10S18 5 15 3" />
+                    <path pathLength="1" d="M23 21C20 17 26 14 23 10S26 5 23 3" />
+                  </svg>
+                </p>
+                <p v-else-if="exchange >= 0 && (phase === 'replying' || phase === 'idle')" class="chat-bubble chat-agent">{{ EXCHANGES[exchange]!.reply }}</p>
+                <p v-if="exchange < 0" class="chat-empty">A new message is on its way…</p>
+              </div>
+              <p class="palette-note">While it thinks, steam rises from the cup. In the chat, the same three wisps stand in for the usual dots.</p>
+            </div>
+
+            <fieldset class="palette-picker editor-section">
+              <legend>{{ study === 'expressions' ? 'Expression' : 'Try one yourself' }}</legend>
+              <div class="expression-options">
+                <label v-for="option in EXPRESSIONS" :key="option.id" class="editor-tile expression-tile" :class="{ 'is-selected': !conversing && expressionId === option.id }">
+                  <input type="radio" name="expression" :value="option.id" :checked="!conversing && expressionId === option.id" :aria-label="option.name" @change="tryExpression(option.id)" />
+                  <svg class="expression-glyph" viewBox="0 0 100 60" aria-hidden="true"><polygon v-for="(points, i) in glyphs[option.id]" :key="i" :points="points" /></svg>
+                  <span>{{ option.name }}</span>
+                </label>
+              </div>
+              <p class="palette-note">{{ study === 'expressions' ? 'Shown in the default personality. Thinking brings the steam.' : 'Picking one pauses the conversation and holds it, played by the chosen personality.' }}</p>
+            </fieldset>
+          </div>
+
           <div v-if="study === 'accessories'" class="accessory-picker">
             <fieldset class="palette-picker">
               <legend>Accessory</legend>
@@ -436,7 +557,7 @@ onUnmounted(() => {
         </details>
 
         <div class="study-controls">
-          <p class="interaction-hint">{{ fallback ? 'Static previews · WebGL unavailable' : manual ? 'Drag the cup to turn it. Arrow keys work too.' : reduced ? 'Reduced motion · static previews' : 'Move your cursor. They’re curious.' }}</p>
+          <p class="interaction-hint">{{ fallback ? 'Static previews · WebGL unavailable' : manual ? 'Drag the cup to turn it. Arrow keys work too.' : reduced ? (emotive ? 'Reduced motion · expressions change without animation' : 'Reduced motion · static previews') : emotive ? 'Move your cursor nearby. It looks at you, then drifts off.' : 'Move your cursor. They’re curious.' }}</p>
           <div v-if="!still" class="controls">
             <label class="angle-control">View angle
               <input aria-label="View angle" type="range" :min="elevationRange[0]" :max="elevationRange[1]" step="1" :value="elevation" @input="changeElevation" />

@@ -6,12 +6,15 @@ import { vessels } from './catalogue'
 import { palette } from './palette'
 import { cayDesigns, colombianDesigns, gaiwanDesigns, kulhadColors, kulhadDesigns, podstakannikColors, podstakannikDesigns, yunomiDesigns } from './designs'
 import { createCupGallery } from './renderer'
+import { EXPRESSIONS } from './expressions'
+import { PERSONALITIES } from './personality'
 
 const gallery = vi.hoisted(() => ({
   setColors: vi.fn(),
   setDesign: vi.fn(),
   setElevation: vi.fn(),
   setTurning: vi.fn(),
+  refresh: vi.fn(),
   dispose: vi.fn()
 }))
 
@@ -280,7 +283,7 @@ describe('cup lab cultural section', () => {
     japanese.click()
     await nextTick()
     await chooseCulture('china')
-    expect(root.querySelectorAll('.study-nav button')).toHaveLength(5)
+    expect(root.querySelectorAll('.study-nav button')).toHaveLength(7)
     expect(root.querySelectorAll('canvas')).toHaveLength(1)
     expect(root.querySelectorAll('.cup-viewport')).toHaveLength(1)
     expect(root.querySelectorAll('input[name="cup-design"]')).toHaveLength(3)
@@ -309,7 +312,7 @@ describe('cup lab cultural section', () => {
     await mount()
     await chooseStudy('Designs')
     await chooseCulture('colombia')
-    expect(root.querySelectorAll('.study-nav button')).toHaveLength(5)
+    expect(root.querySelectorAll('.study-nav button')).toHaveLength(7)
     expect(root.querySelectorAll('input[name="cup-design"]')).toHaveLength(3)
     const view = vi.mocked(createCupGallery).mock.calls.at(-1)![1][0]!
     expect(view.vessel.id).toBe('colombian-mug')
@@ -332,7 +335,7 @@ describe('cup lab cultural section', () => {
     await mount()
     await chooseStudy('Designs')
     await chooseCulture('turkiye')
-    expect(root.querySelectorAll('.study-nav button')).toHaveLength(5)
+    expect(root.querySelectorAll('.study-nav button')).toHaveLength(7)
     expect(root.querySelectorAll('input[name="cup-design"]')).toHaveLength(3)
     const view = vi.mocked(createCupGallery).mock.calls.at(-1)![1][0]!
     expect(view.vessel.id).toBe('cay-glass')
@@ -356,7 +359,7 @@ describe('cup lab cultural section', () => {
     await mount()
     await chooseStudy('Designs')
     await chooseCulture('india')
-    expect(root.querySelectorAll('.study-nav button')).toHaveLength(5)
+    expect(root.querySelectorAll('.study-nav button')).toHaveLength(7)
     expect(root.querySelectorAll('input[name="cup-design"]')).toHaveLength(3)
     const view = vi.mocked(createCupGallery).mock.calls.at(-1)![1][0]!
     expect(view.vessel.id).toBe('kulhad')
@@ -716,5 +719,142 @@ describe('cup lab cultural section', () => {
     }
     expect(createCupGallery).toHaveBeenCalledTimes(2)
     expect(root.textContent).toContain('WebGL unavailable')
+  })
+
+  describe('expression and personality studies', () => {
+    const AWAY = { x: 0, y: 0, active: false }
+    const lastCall = () => vi.mocked(createCupGallery).mock.calls.at(-1)!
+    // En mouvement réduit, l'interprète rend la pose juste : c'est ce qu'on lit ici.
+    const act = () => lastCall()[2]!.perform!(0, AWAY, true)
+    async function pickInput(name: string, value: string) {
+      root.querySelector<HTMLInputElement>(`input[name="${name}"][value="${value}"]`)!.click()
+      await nextTick()
+      await vi.waitFor(() => expect(root.querySelector('.cup-stage')?.getAttribute('data-ready')).toBe('true'))
+    }
+
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it('shows the editor cup twice on Expressions, large and at sidebar size, with a performer', async () => {
+      await mount()
+      await chooseStudy('Editor')
+      await pickInput('editor-vessel', 'gaiwan')
+      await pickInput('editor-accessory', 'leaf')
+      await chooseStudy('Expressions')
+      expect(root.querySelector('.study-nav button[aria-pressed="true"]')?.textContent).toContain('06 Expressions')
+      const [, views, options] = lastCall()
+      expect(views).toHaveLength(2)
+      for (const view of views) {
+        expect(view.vessel.id).toBe('gaiwan')
+        expect(view.design).toBe(gaiwanDesigns[0])
+        expect(view.accessory).toBe('leaf')
+        expect(view.fitVessel).toBe(vessels.find(vessel => vessel.id === 'gaiwan'))
+      }
+      expect(views[1]!.element.closest('.cup-mini')).not.toBeNull()
+      expect(options!.turntable).toBe(false)
+      expect(options!.frame).toEqual({ lift: 1.4, halfHeight: 2.05 })
+      expect(options!.perform).toBeTypeOf('function')
+      expect([...root.querySelectorAll<HTMLInputElement>('input[name="expression"]')].map(input => input.value)).toEqual(EXPRESSIONS.map(expression => expression.id))
+      expect(root.querySelectorAll('.expression-glyph polygon')).toHaveLength(32)
+      expect(root.querySelector('input[name="personality"], .chat-demo')).toBeNull()
+      expect(root.querySelector('figcaption')?.textContent).toContain('Neutral')
+      expect(root.querySelector<HTMLInputElement>('[aria-label="View angle"]')!.value).toBe('8')
+    })
+
+    it('holds the picked expression without rebuilding the scene, and brings steam with Thinking', async () => {
+      await mount()
+      await chooseStudy('Expressions')
+      const calls = vi.mocked(createCupGallery).mock.calls.length
+      expect(act()).toMatchObject({ expression: 'neutral', steam: 0 })
+      await pickInput('expression', 'happy')
+      expect(act()).toMatchObject({ expression: 'happy', steam: 0 })
+      expect(gallery.refresh).toHaveBeenCalled()
+      expect(root.querySelector('.cup-viewport')?.getAttribute('aria-label')).toBe('Mug, stone, looking happy')
+      expect(root.querySelector('figcaption')?.textContent).toContain('Mug · Happy')
+      await pickInput('expression', 'thinking')
+      expect(act()).toMatchObject({ expression: 'thinking', steam: 1 })
+      expect(createCupGallery).toHaveBeenCalledTimes(calls)
+    })
+
+    it('plays a conversation on Personalities: listening, thinking with steam, then the reply', async () => {
+      await mount()
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+      await chooseStudy('Personalities')
+      expect(root.querySelector('.study-nav button[aria-pressed="true"]')?.textContent).toContain('07 Personalities')
+      expect([...root.querySelectorAll<HTMLInputElement>('input[name="personality"]')].map(input => input.value)).toEqual(PERSONALITIES.map(personality => personality.id))
+      expect(root.querySelector<HTMLInputElement>('input[name="personality"][value="lively"]')!.checked).toBe(true)
+      expect(root.querySelector('.chat-thread')?.getAttribute('data-phase')).toBe('idle')
+      expect(root.querySelector('.chat-bubble')).toBeNull()
+      expect(act()).toMatchObject({ expression: 'neutral', steam: 0 })
+
+      const until = async (phase: string) => {
+        for (let i = 0; i < 100 && root.querySelector('.chat-thread')?.getAttribute('data-phase') !== phase; i++) {
+          vi.advanceTimersByTime(100)
+          await nextTick()
+        }
+        expect(root.querySelector('.chat-thread')?.getAttribute('data-phase')).toBe(phase)
+      }
+      await until('listening')
+      expect(root.querySelector('.chat-user')?.textContent).toBe('I got the job!')
+      expect(act()).toMatchObject({ expression: 'attentive', steam: 0 })
+      await until('thinking')
+      expect(root.querySelector('.steam-indicator')?.getAttribute('aria-label')).toBe('Thinking')
+      expect(root.querySelectorAll('.steam-indicator path')).toHaveLength(3)
+      expect(act()).toMatchObject({ expression: 'thinking', steam: 1 })
+      expect(root.querySelector('.cup-viewport')?.getAttribute('aria-label')).toContain('thinking, with steam rising')
+      await until('replying')
+      expect(root.querySelector('.steam-indicator')).toBeNull()
+      expect(root.querySelector('.chat-agent')?.textContent).toBe('That is wonderful news. Congratulations!')
+      expect(act()).toMatchObject({ expression: 'delighted', steam: 0 })
+      await until('idle')
+      expect(act()).toMatchObject({ expression: 'neutral' })
+      await until('listening')
+      expect(root.querySelector('.chat-user')?.textContent).toBe('Can you plan my week?')
+    })
+
+    it('lets the personality change how the same expression is played, and pauses to try one', async () => {
+      await mount()
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+      await chooseStudy('Personalities')
+      const calls = vi.mocked(createCupGallery).mock.calls.length
+      await pickInput('expression', 'surprised')
+      expect(root.querySelector('.chat-heading button')?.textContent).toBe('Play')
+      expect(root.querySelector('.chat-thread')?.getAttribute('data-phase')).toBe('paused')
+      const lively = act()
+      expect(lively.expression).toBe('surprised')
+      await pickInput('personality', 'deadpan')
+      const deadpan = act()
+      expect(deadpan.expression).toBe('surprised')
+      expect(deadpan.face.eyes[0].w).toBeLessThan(lively.face.eyes[0].w)
+      expect(deadpan.face.eyes[0].lid).toBeGreaterThan(0.3)
+      await pickInput('personality', 'playful')
+      expect(act().face.eyes[0].w).toBeGreaterThan(lively.face.eyes[0].w)
+      // En pause, rien n'avance tout seul.
+      vi.advanceTimersByTime(20_000)
+      await nextTick()
+      expect(act().expression).toBe('surprised')
+      root.querySelector<HTMLButtonElement>('.chat-heading button')!.click()
+      await nextTick()
+      expect(root.querySelector('.chat-thread')?.getAttribute('data-phase')).toBe('idle')
+      expect(act().expression).toBe('neutral')
+      expect(createCupGallery).toHaveBeenCalledTimes(calls)
+      // La planche des expressions revient à la personnalité par défaut.
+      await chooseStudy('Expressions')
+      await pickInput('expression', 'surprised')
+      expect(act().face.eyes[0].w).toBeCloseTo(lively.face.eyes[0].w, 9)
+    })
+
+    it('keeps the 3D cup with reduced motion, and falls back to the still without WebGL', async () => {
+      await mount(true)
+      await chooseStudy('Expressions')
+      expect(root.querySelector('.cup-viewport img')).toBeNull()
+      expect(lastCall()[2]!.perform).toBeTypeOf('function')
+      expect(root.querySelector('.interaction-hint')?.textContent).toContain('expressions change without animation')
+      vi.mocked(createCupGallery).mockImplementationOnce(() => { throw new Error('WebGL unavailable') })
+      await chooseStudy('Personalities')
+      expect(root.querySelector('.cup-viewport img')?.getAttribute('src')).toBe('/cups/stills/mug.png')
+      expect(root.querySelector('.cup-mini')).toBeNull()
+    })
   })
 })
