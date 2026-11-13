@@ -10,6 +10,8 @@ export interface CupView {
   vessel: VesselDefinition
   design?: CupDesign
   accessory?: AccessoryId
+  // Tasse nue d'après laquelle l'accessoire se pose, si l'affichage cache une partie du fond.
+  fitVessel?: VesselDefinition
 }
 
 // Cadrage en unités de tasse : centre vertical et demi-hauteur visible.
@@ -63,8 +65,8 @@ export function createCupGallery(canvas: HTMLCanvasElement, views: CupView[], op
   const anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy())
   const turntable = options.turntable ?? false
   const framing = options.frame ?? DEFAULT_FRAME
-  const entries = views.map(({ element, vessel, design, accessory }) => {
-    const cup = createCup(vessel, { pattern: Boolean(design && vessel.pattern), accessory })
+  const entries = views.map(({ element, vessel, design, accessory, fitVessel }) => {
+    const cup = createCup(vessel, { pattern: Boolean(design && vessel.pattern), accessory, fitVessel })
     const scene = new Scene()
     const pivot = cup.root
     // Le pivot est au milieu du corps, et non au pied de la tasse.

@@ -280,7 +280,7 @@ describe('cup lab cultural section', () => {
     japanese.click()
     await nextTick()
     await chooseCulture('china')
-    expect(root.querySelectorAll('.study-nav button')).toHaveLength(4)
+    expect(root.querySelectorAll('.study-nav button')).toHaveLength(5)
     expect(root.querySelectorAll('canvas')).toHaveLength(1)
     expect(root.querySelectorAll('.cup-viewport')).toHaveLength(1)
     expect(root.querySelectorAll('input[name="cup-design"]')).toHaveLength(3)
@@ -309,7 +309,7 @@ describe('cup lab cultural section', () => {
     await mount()
     await chooseStudy('Designs')
     await chooseCulture('colombia')
-    expect(root.querySelectorAll('.study-nav button')).toHaveLength(4)
+    expect(root.querySelectorAll('.study-nav button')).toHaveLength(5)
     expect(root.querySelectorAll('input[name="cup-design"]')).toHaveLength(3)
     const view = vi.mocked(createCupGallery).mock.calls.at(-1)![1][0]!
     expect(view.vessel.id).toBe('colombian-mug')
@@ -332,7 +332,7 @@ describe('cup lab cultural section', () => {
     await mount()
     await chooseStudy('Designs')
     await chooseCulture('turkiye')
-    expect(root.querySelectorAll('.study-nav button')).toHaveLength(4)
+    expect(root.querySelectorAll('.study-nav button')).toHaveLength(5)
     expect(root.querySelectorAll('input[name="cup-design"]')).toHaveLength(3)
     const view = vi.mocked(createCupGallery).mock.calls.at(-1)![1][0]!
     expect(view.vessel.id).toBe('cay-glass')
@@ -356,7 +356,7 @@ describe('cup lab cultural section', () => {
     await mount()
     await chooseStudy('Designs')
     await chooseCulture('india')
-    expect(root.querySelectorAll('.study-nav button')).toHaveLength(4)
+    expect(root.querySelectorAll('.study-nav button')).toHaveLength(5)
     expect(root.querySelectorAll('input[name="cup-design"]')).toHaveLength(3)
     const view = vi.mocked(createCupGallery).mock.calls.at(-1)![1][0]!
     expect(view.vessel.id).toBe('kulhad')
@@ -527,6 +527,124 @@ describe('cup lab cultural section', () => {
     await chooseStudy('Accessories')
     expect(root.querySelector<HTMLInputElement>(`input[value="${chosenAccessory}"]`)!.checked).toBe(true)
     expect(vi.mocked(createCupGallery).mock.calls.at(-1)![1][0]!.accessory).toBe(chosenAccessory)
+  })
+
+  describe('editor study', () => {
+    async function pick(name: string, value: string) {
+      const input = root.querySelector<HTMLInputElement>(`input[name="${name}"][value="${value}"]`)!
+      input.click()
+      await nextTick()
+      await vi.waitFor(() => expect(root.querySelector('.cup-stage')?.getAttribute('data-ready')).toBe('true'))
+    }
+    const lastView = () => vi.mocked(createCupGallery).mock.calls.at(-1)![1][0]!
+    const lastOptions = () => vi.mocked(createCupGallery).mock.calls.at(-1)![2]!
+
+    it('opens as the fifth study with a cursor-following cup and three tabs', async () => {
+      await mount()
+      await chooseStudy('Editor')
+      expect(root.querySelector('.study-nav button[aria-pressed="true"]')?.textContent).toContain('05 Editor')
+      expect([...root.querySelectorAll('.editor-tabs button')].map(button => button.textContent)).toEqual(['Vessel', 'Colour', 'Accessory'])
+      // La première tasse part de la couleur par défaut : la pierre, qui est le gris de la palette.
+      expect(lastView().vessel.id).toBe(vessels[0]!.id)
+      expect(lastView().vessel.colors.body).toBe(vessels[0]!.colors.body)
+      expect(root.querySelector<HTMLInputElement>('input[name="editor-colour"][value="stone"]')!.checked).toBe(true)
+      expect(lastView().design).toBeUndefined()
+      expect(lastView().accessory).toBeUndefined()
+      // Pas de platine : la tasse suit le curseur comme sur la première page.
+      expect(lastOptions().turntable).toBe(false)
+      expect(lastOptions().frame).toEqual({ lift: 1.4, halfHeight: 2.05 })
+      expect(root.querySelector('.cup-viewport.is-turntable')).toBeNull()
+      expect(root.querySelectorAll('.cup-viewport')).toHaveLength(1)
+      expect(root.querySelector('.interaction-hint')?.textContent).toContain('cursor')
+    })
+
+    it('offers all eighteen vessels, exactly the twelve colours on an ordinary cup, and six accessories plus none', async () => {
+      await mount()
+      await chooseStudy('Editor')
+      expect(root.querySelectorAll('input[name="editor-vessel"]')).toHaveLength(18)
+      expect([...root.querySelectorAll<HTMLInputElement>('input[name="editor-colour"]')].map(input => input.value)).toEqual(palette.map(option => option.id))
+      expect([...root.querySelectorAll<HTMLInputElement>('input[name="editor-accessory"]')].map(input => input.value))
+        .toEqual(['none', 'paintbrush', 'leaf', 'beret', 'tea-bag', 'headphones', 'scarf'])
+    })
+
+    it('rebuilds for a new vessel or accessory but recolours in place', async () => {
+      await mount()
+      await chooseStudy('Editor')
+      const calls = vi.mocked(createCupGallery).mock.calls.length
+      await pick('editor-colour', 'blush')
+      await pick('editor-colour', 'oat')
+      expect(createCupGallery).toHaveBeenCalledTimes(calls)
+      expect(gallery.setColors).toHaveBeenLastCalledWith(0, expect.objectContaining({ body: palette.find(option => option.id === 'oat')!.colors.body }))
+      await pick('editor-vessel', 'tall-mug')
+      expect(createCupGallery).toHaveBeenCalledTimes(calls + 1)
+      expect(lastView().vessel.id).toBe('tall-mug')
+      expect(lastView().vessel.colors.body).toBe(palette.find(option => option.id === 'oat')!.colors.body)
+      await pick('editor-accessory', 'beret')
+      expect(createCupGallery).toHaveBeenCalledTimes(calls + 2)
+      expect(lastView().accessory).toBe('beret')
+      expect(root.querySelector('.cup-viewport')?.getAttribute('aria-label')).toBe('Tall mug, oat, with a beret')
+    })
+
+    it('turns the second tab into Pattern on a cultural vessel, which opens on its first pattern and never on grey', async () => {
+      await mount()
+      await chooseStudy('Editor')
+      await pick('editor-vessel', 'gaiwan')
+      expect([...root.querySelectorAll('.editor-tabs button')].map(button => button.textContent)).toEqual(['Vessel', 'Pattern', 'Accessory'])
+      // Les couleurs ordinaires disparaissent : motif OU couleur, selon la tasse.
+      expect(root.querySelector('input[name="editor-colour"]')).toBeNull()
+      const patterns = [...root.querySelectorAll<HTMLInputElement>('input[name="editor-pattern"]')]
+      expect(patterns.map(input => input.value)).toEqual(gaiwanDesigns.map(design => design.id))
+      expect(patterns[0]!.checked).toBe(true)
+      expect(lastView().design).toBe(gaiwanDesigns[0])
+      expect(lastView().vessel.colors.body).not.toBe(vessels[0]!.colors.body)
+      await pick('editor-accessory', 'leaf')
+      expect(lastView().design).toBe(gaiwanDesigns[0])
+      expect(lastView().accessory).toBe('leaf')
+      const calls = vi.mocked(createCupGallery).mock.calls.length
+      await pick('editor-pattern', gaiwanDesigns[1]!.id)
+      expect(createCupGallery).toHaveBeenCalledTimes(calls)
+      expect(gallery.setDesign).toHaveBeenLastCalledWith(0, gaiwanDesigns[1])
+      expect(root.querySelector('.cup-viewport')?.getAttribute('aria-label')).toContain(`${gaiwanDesigns[1]!.name} pattern`)
+      expect(lastView().accessory).toBe('leaf')
+      // Les accessoires se posent sur la tasse nue, pas sur le verre rempli.
+      expect(lastView().fitVessel).toBe(vessels.find(vessel => vessel.id === 'gaiwan'))
+    })
+
+    it('keeps a colour across ordinary cups but starts every cultural vessel from its default', async () => {
+      await mount()
+      await chooseStudy('Editor')
+      await pick('editor-colour', 'blush')
+      await pick('editor-vessel', 'tall-mug')
+      expect(root.querySelector<HTMLInputElement>('input[name="editor-colour"][value="blush"]')!.checked).toBe(true)
+      expect(lastView().vessel.colors.body).toBe(palette.find(option => option.id === 'blush')!.colors.body)
+      // Une tasse culturelle ne reprend pas la couleur : elle ouvre sur son premier motif.
+      await pick('editor-vessel', 'yunomi')
+      expect(lastView().design).toBe(yunomiDesigns[0])
+      await pick('editor-pattern', yunomiDesigns[1]!.id)
+      expect(gallery.setDesign).toHaveBeenLastCalledWith(0, yunomiDesigns[1])
+      // Au retour sur une tasse ordinaire, la couleur repart elle aussi de la pierre.
+      await pick('editor-vessel', 'mug')
+      expect(lastView().design).toBeUndefined()
+      expect(root.querySelector<HTMLInputElement>('input[name="editor-colour"][value="stone"]')!.checked).toBe(true)
+      expect(lastView().vessel.colors.body).toBe(vessels[0]!.colors.body)
+      expect(root.querySelector('input[name="editor-pattern"]')).toBeNull()
+    })
+
+    it('keeps its choices when leaving and returning, and stays 3D with reduced motion', async () => {
+      await mount()
+      await chooseStudy('Editor')
+      await pick('editor-vessel', 'teacup')
+      await pick('editor-accessory', 'headphones')
+      await chooseStudy('Shapes')
+      await chooseStudy('Editor')
+      expect(root.querySelector<HTMLInputElement>('input[name="editor-vessel"][value="teacup"]')!.checked).toBe(true)
+      expect(lastView().vessel.id).toBe('teacup')
+      expect(lastView().accessory).toBe('headphones')
+      media.matches = true
+      media.dispatchEvent(new Event('change'))
+      await nextTick()
+      expect(root.querySelector('.cup-canvas.is-hidden')).toBeNull()
+    })
   })
 
   it('keeps the viewing angle across repeated cup changes and remembers the cup independently of the other studies', async () => {

@@ -6,14 +6,16 @@ import { palette, paletteVessel } from './palette'
 import { bandLayout, designSvg } from './pattern'
 import type { createCupGallery } from './renderer'
 import type { AccessoryId } from './accessories'
+import { collectionFor, DEFAULT_COLOUR, defaultDesign, editorLook, PLAIN } from './editor'
 import './lab.css'
 
-type Study = 'shapes' | 'colours' | 'designs' | 'accessories'
+type Study = 'shapes' | 'colours' | 'designs' | 'accessories' | 'editor'
 const STUDIES: Record<Study, { number: string; label: string; eyebrow: string; title: string; description: string }> = {
   shapes: { number: '01', label: 'Shapes', eyebrow: 'STUDY 01 / FORM', title: 'A little character.', description: 'Eighteen shapes. Two eyes. Nothing extra.' },
   colours: { number: '02', label: 'Colours', eyebrow: 'STUDY 02 / COLOUR', title: 'Find its colour.', description: 'Twelve forms. Twelve colours. Pick a cup to try them.' },
   designs: { number: '03', label: 'Designs', eyebrow: 'STUDY 03 / PATTERN', title: 'Give it a pattern.', description: 'Choose a culture. Three patterns per vessel. Drag the cup to turn it.' },
-  accessories: { number: '04', label: 'Accessories', eyebrow: 'STUDY 04 / ACCESSORIES', title: 'Find the right fit.', description: 'Choose any cup. We’ll add accessories one at a time.' }
+  accessories: { number: '04', label: 'Accessories', eyebrow: 'STUDY 04 / ACCESSORIES', title: 'Find the right fit.', description: 'Choose any cup. We’ll add accessories one at a time.' },
+  editor: { number: '05', label: 'Editor', eyebrow: 'STUDY 05 / EDITOR', title: 'Make it yours.', description: 'A shape, a colour or a pattern, and an accessory. Everything follows your cursor.' }
 }
 const ACCESSORIES: { id: AccessoryId; name: string }[] = [
   { id: 'paintbrush', name: 'Paintbrush' },
@@ -43,20 +45,45 @@ const designId = computed({
 const design = computed(() => collection.value.designs.find(option => option.id === designId.value)!)
 const accessoryCupId = ref(vessels[0]!.id)
 const accessoryId = ref<AccessoryId>(ACCESSORIES[0]!.id)
+type EditorTab = 'vessel' | 'finish' | 'accessory'
+// Le deuxième onglet s'appelle Colour ou Pattern selon la tasse choisie.
+const editorTabs = computed<{ id: EditorTab; label: string }[]>(() => [
+  { id: 'vessel', label: 'Vessel' },
+  { id: 'finish', label: editorCollection.value ? 'Pattern' : 'Colour' },
+  { id: 'accessory', label: 'Accessory' }
+])
+const editorTab = ref<EditorTab>('vessel')
+const editorCupId = ref(vessels[0]!.id)
+const editorColourId = ref(DEFAULT_COLOUR)
+const editorDesignId = ref(defaultDesign(vessels[0]!.id))
+const editorAccessory = ref<AccessoryId | typeof PLAIN>(PLAIN)
+const editorCollection = computed(() => collectionFor(editorCupId.value))
+// Chaque tasse repart de son option par défaut : une tasse culturelle ne garde pas la
+// couleur de la précédente, et le motif d'une autre tasse ne s'applique pas. D'une tasse
+// ordinaire à une autre, la couleur choisie reste, pour l'essayer sur plusieurs formes.
+watch(editorCupId, () => {
+  if (editorCollection.value) editorColourId.value = DEFAULT_COLOUR
+  if (!editorCollection.value?.designs.some(option => option.id === editorDesignId.value)) editorDesignId.value = defaultDesign(editorCupId.value)
+})
+const look = computed(() => editorLook({ cupId: editorCupId.value, colourId: editorColourId.value, designId: editorDesignId.value, accessory: editorAccessory.value }))
 const BUILT_ACCESSORIES: AccessoryId[] = ['paintbrush', 'leaf', 'beret', 'tea-bag', 'headphones', 'scarf']
 // Seuls les accessoires déjà modélisés apparaissent ; les autres laissent la tasse nue.
-const shownAccessory = computed(() => study.value === 'accessories' && BUILT_ACCESSORIES.includes(accessoryId.value) && !still.value ? accessoryId.value : undefined)
+const shownAccessory = computed(() => study.value === 'editor' ? look.value.accessory
+  : study.value === 'accessories' && BUILT_ACCESSORIES.includes(accessoryId.value) && !still.value ? accessoryId.value : undefined)
 const accessoryCup = computed(() => vessels.find(vessel => vessel.id === accessoryCupId.value)!)
 const cupId = computed({
-  get: () => study.value === 'colours' ? colourCupId.value : accessoryCupId.value,
+  get: () => study.value === 'colours' ? colourCupId.value : study.value === 'editor' ? editorCupId.value : accessoryCupId.value,
   set: (value: string) => {
     if (study.value === 'colours') colourCupId.value = value
+    else if (study.value === 'editor') editorCupId.value = value
     else accessoryCupId.value = value
   }
 })
-const shownVessels = computed(() => study.value === 'shapes' ? vessels : study.value === 'colours' ? [preview.value] : study.value === 'designs' ? [designVessel.value] : [accessoryCup.value])
+const shownVessels = computed(() => study.value === 'shapes' ? vessels : study.value === 'colours' ? [preview.value]
+  : study.value === 'designs' ? [designVessel.value] : study.value === 'editor' ? [look.value.vessel] : [accessoryCup.value])
 const single = computed(() => study.value !== 'shapes')
 const hasCupPicker = computed(() => study.value === 'colours' || study.value === 'accessories')
+const editing = computed(() => study.value === 'editor')
 const manual = computed(() => study.value === 'designs' || study.value === 'accessories')
 const turning = ref(false)
 const elevation = ref(16)
@@ -65,7 +92,7 @@ const fallback = ref(false)
 const reduced = ref(false)
 const ready = ref(false)
 // La platine reste en 3D avec mouvement réduit : rien ne bouge sans la main de l'utilisateur.
-const still = computed(() => fallback.value || (reduced.value && !manual.value))
+const still = computed(() => fallback.value || (reduced.value && !manual.value && !editing.value))
 const elevationRange = computed(() => manual.value ? [-20, 60] : [0, 32])
 const everydayVessels = vessels.filter(vessel => !vessel.heritage)
 const culturalVessels = vessels.filter(vessel => vessel.heritage)
@@ -76,17 +103,19 @@ let disposed = false
 let media: MediaQueryList
 
 // Vignette centrée sur une figure, même lorsque la bande dégage le visage.
-const thumbnails = computed(() => {
-  const band = designVessel.value.pattern!
-  const part = designVessel.value.parts.find(part => part.id === band.surface)!
+function designThumbnails(current: typeof collection.value) {
+  const band = current.vessel.pattern!
+  const part = current.vessel.parts.find(part => part.id === band.surface)!
   const layout = bandLayout(part.outline, band)
   const size = { viewWidth: Math.round(layout.circumference * 1000), viewHeight: Math.round(layout.length * 1000) }
-  return Object.fromEntries(collection.value.designs.map(option => {
+  return Object.fromEntries(current.designs.map(option => {
     const view: [number, number, number, number] = [size.viewWidth * ((option.previewCenter ?? 0) - 0.12), 0, size.viewWidth * 0.24, size.viewHeight]
     return [option.id,
-      `data:image/svg+xml;charset=utf-8,${encodeURIComponent(designSvg(option.draw(size.viewWidth, size.viewHeight), size.viewWidth, size.viewHeight, [120, 84], collection.value.colors, view))}`]
+      `data:image/svg+xml;charset=utf-8,${encodeURIComponent(designSvg(option.draw(size.viewWidth, size.viewHeight), size.viewWidth, size.viewHeight, [120, 84], current.colors, view))}`]
   }))
-})
+}
+const thumbnails = computed(() => designThumbnails(collection.value))
+const editorThumbnails = computed<Record<string, string>>(() => editorCollection.value ? designThumbnails(editorCollection.value) : {})
 
 async function syncMotion() {
   reduced.value = media.matches
@@ -105,11 +134,14 @@ async function syncMotion() {
       const elements = [...stage.value.querySelectorAll<HTMLElement>('.cup-viewport')]
       const designs = study.value === 'designs'
       const accessories = study.value === 'accessories'
+      const editor = study.value === 'editor'
       gallery = createCupGallery(canvas.value, shownVessels.value.map((vessel, i) => ({
-        vessel, element: elements[i]!, design: designs ? design.value : undefined, accessory: accessories ? shownAccessory.value : undefined
+        vessel, element: elements[i]!, fitVessel: editor ? look.value.fitVessel : undefined,
+        design: designs ? design.value : editor ? look.value.design : undefined,
+        accessory: accessories || editor ? shownAccessory.value : undefined
       })), {
         turntable: manual.value, initialTurn: accessories ? turn.value : 0, onTurn: degrees => { turn.value = degrees },
-        frame: accessories ? ACCESSORY_FRAME : undefined
+        frame: accessories || editor ? ACCESSORY_FRAME : undefined
       })
       galleryVesselId = designs ? designVessel.value.id : undefined
       gallery.setElevation(elevation.value)
@@ -128,11 +160,20 @@ watch(selected, () => {
 watch(design, () => {
   if (study.value === 'designs' && galleryVesselId === designVessel.value.id) gallery?.setDesign(0, design.value)
 })
-watch([study, cultureId, cupId, shownAccessory], async ([currentStudy, currentCulture, currentCup, currentAccessory], [previousStudy, previousCulture, previousCup, previousAccessory]) => {
+// Dans l'éditeur, la scène n'est reconstruite que si la structure change ; une autre
+// couleur ou un autre motif de la même tasse se règle en place.
+watch(() => look.value.vessel.colors, colors => {
+  if (study.value === 'editor' && !look.value.design) gallery?.setColors(0, colors)
+})
+watch(() => look.value.design, current => {
+  if (study.value === 'editor' && current) gallery?.setDesign(0, current)
+})
+watch([study, cultureId, cupId, shownAccessory, () => look.value.key], async ([currentStudy, currentCulture, currentCup, currentAccessory, currentKey], [previousStudy, previousCulture, previousCup, previousAccessory, previousKey]) => {
   if (currentStudy === previousStudy &&
       !(currentStudy === 'designs' && currentCulture !== previousCulture) &&
       !((currentStudy === 'colours' || currentStudy === 'accessories') && currentCup !== previousCup) &&
-      !(currentStudy === 'accessories' && currentAccessory !== previousAccessory)) return
+      !(currentStudy === 'accessories' && currentAccessory !== previousAccessory) &&
+      !(currentStudy === 'editor' && currentKey !== previousKey)) return
   gallery?.dispose()
   gallery = undefined
   galleryVesselId = undefined
@@ -155,14 +196,22 @@ function changeElevation(event: Event) {
   gallery?.setElevation(elevation.value)
 }
 
+function editorLabel(vessel: typeof vessels[number]) {
+  const colour = palette.find(option => option.id === editorColourId.value)
+  const finish = look.value.design ? `${look.value.design.name} pattern` : (colour ?? palette.find(option => option.id === DEFAULT_COLOUR)!).name.toLowerCase()
+  const accessory = ACCESSORIES.find(option => option.id === look.value.accessory)
+  return [vessel.name, finish, ...(accessory ? [`with ${accessory.id === 'headphones' ? 'headphones' : `a ${accessory.name.toLowerCase()}`}`] : [])].join(', ')
+}
+
 function label(vessel: typeof vessels[number]) {
+  if (study.value === 'editor') return editorLabel(vessel)
   if (study.value === 'designs') return `${vessel.name} with the ${design.value.name.toLowerCase()} pattern, ${collection.value.colorDescription}, turned ${turn.value} degrees`
   if (study.value === 'accessories') return `${vessel.name}, grey with ${shownAccessory.value ? `a ${shownAccessory.value === 'headphones' ? 'pair of headphones' : ACCESSORIES.find(option => option.id === shownAccessory.value)!.name.toLowerCase()}` : 'no accessories'}${still.value ? '' : `, turned ${turn.value} degrees`}`
   return `${vessel.name}, ${study.value === 'shapes' ? 'grey' : colour.value.name} with ${vessel.colors.eyes === '#1c1c1a' ? 'dark' : 'white'} eyes${vessel.lid || vessel.parts.some(part => part.id === 'lid') ? ' and a lid' : ' and a dark interior'}`
 }
 
 function stillSource(vessel: typeof vessels[number]) {
-  if (study.value === 'shapes' || study.value === 'accessories') return `/cups/stills/${vessel.id}.png`
+  if (study.value === 'shapes' || study.value === 'accessories' || study.value === 'editor') return `/cups/stills/${vessel.id}.png`
   if (study.value === 'colours') return `/cups/stills/palette/${vessel.id === 'mug' ? '' : `${vessel.id}/`}${selected.value}.png`
   return `/cups/stills/designs/${designId.value}.png`
 }
@@ -207,7 +256,7 @@ onUnmounted(() => {
           <p class="study-description">{{ STUDIES[study].description }}</p>
         </div>
 
-        <div :class="{ 'colour-workspace': single, 'cup-picker-workspace': hasCupPicker }">
+        <div :class="{ 'colour-workspace': single, 'cup-picker-workspace': hasCupPicker, 'editor-workspace': editing }">
           <label v-if="hasCupPicker" class="culture-control cup-control">Cup
             <select v-model="cupId" aria-label="Cup">
               <optgroup label="Everyday forms">
@@ -238,6 +287,7 @@ onUnmounted(() => {
                   <template v-if="study === 'shapes'"><span class="cup-number">{{ String(i + 1).padStart(2, '0') }}</span>{{ vessel.name }}</template>
                   <template v-else-if="study === 'colours'">{{ vessel.name }} · {{ colour.name }}</template>
                   <template v-else-if="study === 'designs'">{{ vessel.name }} · {{ design.name }}</template>
+                  <template v-else-if="study === 'editor'">{{ vessel.name }}</template>
                   <template v-else>{{ vessel.name }}</template>
                   <span v-if="vessel.heritage" class="cup-origin">{{ vessel.heritage.origin }}</span>
                 </figcaption>
@@ -274,6 +324,67 @@ onUnmounted(() => {
               </div>
             </fieldset>
             <p class="palette-note">Bold shapes for small avatars. One ink on the body, with colours kept separate from the pattern.</p>
+          </div>
+
+          <div v-if="editing" class="editor-panel">
+            <div class="editor-tabs" role="group" aria-label="Edit">
+              <button v-for="tab in editorTabs" :key="tab.id" type="button" :aria-pressed="editorTab === tab.id" @click="editorTab = tab.id">{{ tab.label }}</button>
+            </div>
+
+            <fieldset v-show="editorTab === 'vessel'" class="palette-picker editor-section">
+              <legend>Vessel</legend>
+              <p class="editor-group">Basic vessels</p>
+              <div class="editor-grid">
+                <label v-for="vessel in everydayVessels" :key="vessel.id" class="editor-tile" :class="{ 'is-selected': editorCupId === vessel.id }">
+                  <input v-model="editorCupId" type="radio" name="editor-vessel" :value="vessel.id" :aria-label="vessel.name" />
+                  <img :src="`/cups/stills/${vessel.id}.png`" alt="" width="64" height="64" loading="lazy" />
+                </label>
+              </div>
+              <p class="editor-group">Cultural vessels</p>
+              <div class="editor-grid">
+                <label v-for="vessel in culturalVessels" :key="vessel.id" class="editor-tile" :class="{ 'is-selected': editorCupId === vessel.id }">
+                  <input v-model="editorCupId" type="radio" name="editor-vessel" :value="vessel.id" :aria-label="vessel.name" />
+                  <img :src="`/cups/stills/${vessel.id}.png`" alt="" width="64" height="64" loading="lazy" />
+                </label>
+              </div>
+            </fieldset>
+
+            <fieldset v-show="editorTab === 'finish'" class="palette-picker editor-section">
+              <template v-if="editorCollection">
+                <legend>Pattern</legend>
+                <div class="editor-grid editor-patterns">
+                  <label v-for="option in editorCollection.designs" :key="option.id" class="editor-tile" :class="{ 'is-selected': editorDesignId === option.id }">
+                    <input v-model="editorDesignId" type="radio" name="editor-pattern" :value="option.id" :aria-label="option.name" />
+                    <img :src="editorThumbnails[option.id]" alt="" width="120" height="84" />
+                  </label>
+                </div>
+                <p class="palette-note">{{ editorCollection.label }}. Each pattern brings its own colours.</p>
+              </template>
+              <template v-else>
+                <legend>Colour</legend>
+                <div class="editor-swatches">
+                  <label v-for="option in palette" :key="option.id" class="editor-swatch" :class="{ 'is-selected': editorColourId === option.id }">
+                    <input v-model="editorColourId" type="radio" name="editor-colour" :value="option.id" :aria-label="option.name" />
+                    <span class="colour-swatch" :style="{ backgroundColor: option.colors.body }" aria-hidden="true" />
+                  </label>
+                </div>
+                <p class="palette-note">The inside, rim and eyes follow your choice.</p>
+              </template>
+            </fieldset>
+
+            <fieldset v-show="editorTab === 'accessory'" class="palette-picker editor-section">
+              <legend>Accessory</legend>
+              <div class="editor-grid editor-accessories">
+                <label class="editor-tile editor-text-tile" :class="{ 'is-selected': editorAccessory === PLAIN }">
+                  <input v-model="editorAccessory" type="radio" name="editor-accessory" :value="PLAIN" aria-label="No accessory" />
+                  <span>None</span>
+                </label>
+                <label v-for="option in ACCESSORIES" :key="option.id" class="editor-tile editor-text-tile" :class="{ 'is-selected': editorAccessory === option.id }">
+                  <input v-model="editorAccessory" type="radio" name="editor-accessory" :value="option.id" :aria-label="option.name" />
+                  <span>{{ option.name }}</span>
+                </label>
+              </div>
+            </fieldset>
           </div>
 
           <div v-if="study === 'accessories'" class="accessory-picker">

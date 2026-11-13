@@ -89,6 +89,26 @@ a { color: inherit; }
 .accessory-option { gap: 12px; padding: 12px 10px; font-size: 13px; }
 .accessory-option input { position: static; opacity: 1; width: 14px; height: 14px; margin: 0; accent-color: var(--lab-text); }
 .design-option { gap: 14px; font-size: 13px; }
+.editor-workspace { grid-template-columns: minmax(0, 1fr) 360px; gap: 28px 48px; align-items: start; }
+.editor-workspace .cup-stage { grid-column: 1; position: sticky; top: 24px; }
+.editor-panel { grid-column: 2; min-width: 0; }
+.editor-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; margin-bottom: 24px; padding: 4px; border: 1px solid var(--lab-border); border-radius: 8px; }
+.editor-tabs button { border: 0; background: transparent; color: var(--lab-muted); cursor: pointer; border-radius: 5px; padding: 10px 4px; font-size: 12px; }
+.editor-tabs button[aria-pressed='true'] { background: var(--lab-active); color: var(--lab-text); }
+.editor-tabs button:focus-visible, .editor-tile:focus-within, .editor-swatch:focus-within { outline: 2px solid var(--lab-text); outline-offset: 2px; }
+.editor-section:disabled { opacity: 0.45; }
+.editor-group { color: var(--lab-muted); font-size: 11px; letter-spacing: 1px; text-transform: uppercase; margin: 22px 0 10px; }
+.editor-group:first-of-type { margin-top: 0; }
+.editor-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 8px; }
+.editor-patterns, .editor-accessories { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.editor-tile { position: relative; display: flex; align-items: center; justify-content: center; min-height: 64px; border: 1px solid var(--lab-border); border-radius: 6px; padding: 6px; font-size: 12px; cursor: pointer; }
+.editor-tile:hover { background: var(--lab-active); }
+.editor-tile.is-selected, .editor-swatch.is-selected { border-color: var(--lab-text); box-shadow: 0 0 0 1px var(--lab-text); }
+.editor-tile input, .editor-swatch input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.editor-tile img { display: block; width: 100%; height: 100%; max-height: 64px; object-fit: contain; border-radius: 4px; }
+.editor-text-tile { min-height: 48px; }
+.editor-swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(44px, 1fr)); gap: 10px; }
+.editor-swatch { display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; border: 1px solid transparent; border-radius: 50%; cursor: pointer; }
 .design-swatch { display: block; width: 72px; height: 50px; flex-shrink: 0; border-radius: 4px; }
 .cup-viewport.is-turntable { cursor: grab; touch-action: none; border-radius: 8px; }
 .cup-viewport.is-turntable:active { cursor: grabbing; }
@@ -113,6 +133,9 @@ a { color: inherit; }
   .study-heading { margin-bottom: 24px; }
   .colour-workspace { grid-template-columns: minmax(0, 1fr); gap: 32px; }
   .cup-picker-workspace { grid-template-rows: auto auto auto; }
+  .editor-workspace { grid-template-columns: minmax(0, 1fr); }
+  .editor-workspace .cup-stage { position: static; }
+  .editor-panel { grid-column: 1; width: 100%; max-width: 440px; justify-self: center; }
   .cup-control, .colour-picker, .accessory-picker { grid-column: 1; width: 100%; max-width: 440px; justify-self: center; }
   .cup-control { grid-row: 1; }
   .cup-picker-workspace .cup-stage { grid-column: 1; grid-row: 2; }

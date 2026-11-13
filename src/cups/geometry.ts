@@ -106,7 +106,7 @@ function tiltLid(root: Group, lid: { pivot: [number, number]; angle: number; lif
   }
 }
 
-export function createCup(definition: VesselDefinition, options: { pattern?: boolean; accessory?: AccessoryId } = {}) {
+export function createCup(definition: VesselDefinition, options: { pattern?: boolean; accessory?: AccessoryId; fitVessel?: VesselDefinition } = {}) {
   const root = new Group()
   const materials = new Map<string, MeshBasicMaterial>()
   const tonedMaterials = new Map<string, MeshBasicMaterial>()
@@ -191,14 +191,14 @@ export function createCup(definition: VesselDefinition, options: { pattern?: boo
     root.add(beret.group)
   }
   if (options.accessory === 'paintbrush') {
-    const fit = fitBrush(definition)
+    const fit = fitBrush(options.fitVessel ?? definition)
     const brush = createPaintbrush(fit)
     extraMaterials.push(...brush.materials)
     root.add(brush.group)
     if (fit.lid) tiltLid(root, fit.lid)
   }
   if (options.accessory === 'leaf') {
-    const fit = fitSprout(definition)
+    const fit = fitSprout(options.fitVessel ?? definition)
     const sprout = createSprout(fit)
     extraMaterials.push(...sprout.materials)
     root.add(sprout.group)
