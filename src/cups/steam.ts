@@ -63,8 +63,10 @@ export function createSteam(height: number, color: string = STEAM.colors.light) 
     const indices: number[] = []
     for (let i = 0; i < STEAM.segments; i++) indices.push(i * 2, i * 2 + 1, i * 2 + 2, i * 2 + 1, i * 2 + 3, i * 2 + 2)
     geometry.setIndex(indices)
-    const material = new MeshBasicMaterial({ color, side: DoubleSide, transparent: true, opacity: 0, toneMapped: false, depthWrite: false })
+    const material = new MeshBasicMaterial({ color, side: DoubleSide, transparent: true, opacity: 0, toneMapped: false, depthWrite: false, depthTest: false })
     const mesh = new Mesh(geometry, material)
+    // La vapeur se dessine en dernier et sans test de profondeur : jamais cachée par un accessoire.
+    mesh.renderOrder = 10
     mesh.name = `steam-${index}`
     mesh.frustumCulled = false
     group.add(mesh)
