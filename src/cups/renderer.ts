@@ -55,6 +55,8 @@ const STEAM_BASE = 0.07
 const STEAM_MARGIN = 0.1
 // Plafond de la hauteur de vapeur, en unités de tasse : au-delà elle ne ferait que s'étirer.
 const STEAM_MAX = 1.5
+// Plancher : la vapeur ne se réduit jamais en dessous, même sous un grand chapeau.
+const STEAM_MIN = 0.6
 
 // Passage d'une tasse à l'autre : le motif et l'accessoire s'effacent, la forme glisse, puis ils reviennent.
 const MORPH_OUT = 0.11
@@ -121,11 +123,14 @@ export function createCupGallery(canvas: HTMLCanvasElement, views: CupView[], op
     const camera = new OrthographicCamera(-1.6, 1.6, framing.halfHeight, -framing.halfHeight, 0.1, 50)
     // La vapeur reste face à la caméra : elle ne tourne pas avec la tasse.
     // La vapeur part du plus haut de ce qui est sur la tasse (béret, plumes, tige) et monte
-    // jusqu'à la marge du cadre : toute la hauteur libre, plafonnée.
+    // jusqu'à la marge du cadre. Quand la place manque, elle garde une hauteur minimale,
+    // collée en haut du cadre, et passe devant l'accessoire plutôt que de s'écraser.
     const top = Math.max(cup.topY - framing.lift, new Box3().setFromObject(pivot).max.y)
-    const steam = options.perform ? createSteam(Math.min(STEAM_MAX, framing.halfHeight - STEAM_MARGIN - STEAM_BASE - top), options.steamColor) : undefined
+    const ceiling = framing.halfHeight - STEAM_MARGIN
+    const start = Math.min(top + STEAM_BASE, ceiling - STEAM_MIN)
+    const steam = options.perform ? createSteam(Math.min(STEAM_MAX, ceiling - start), options.steamColor) : undefined
     if (steam) {
-      steam.group.position.set(pivot.position.x, top + STEAM_BASE, 0)
+      steam.group.position.set(pivot.position.x, start, 0)
       scene.add(steam.group)
     }
     return { element, vessel, design, accessory, morph: undefined as Morphing | undefined, maskWidth: 0, cup, scene, camera, steam, steamY: steam?.group.position.y ?? 0, x: 0, y: 0, bx: 0, by: 0, tx: 0, ty: 0 }
