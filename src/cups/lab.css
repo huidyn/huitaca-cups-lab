@@ -144,8 +144,19 @@ a { color: inherit; }
 @media (prefers-reduced-motion: reduce) {
   .steam-indicator path { animation: none; stroke-dasharray: none; }
 }
-.cup-mini { position: absolute; left: 0; bottom: 0; display: flex; align-items: center; gap: 10px; color: var(--lab-muted); font-size: 10px; letter-spacing: 0.4px; }
+.cup-mini { position: absolute; left: 0; top: 0; display: flex; align-items: center; gap: 10px; color: var(--lab-muted); font-size: 10px; letter-spacing: 0.4px; }
 .cup-mini .cup-viewport { width: 48px; }
+/* La zone de saisie, sous la tasse comme dans l'app. */
+.chat-composer { position: relative; display: flex; align-items: center; gap: 8px; width: 100%; max-width: 440px; margin: 28px auto 0; padding: 6px 6px 6px 18px; border: 1px solid var(--lab-border); border-radius: 999px; background: var(--lab-bg); transition: border-color 0.15s; }
+.chat-composer:focus-within { border-color: var(--lab-text); }
+.chat-composer input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--lab-text); font-size: 14px; padding: 8px 0; }
+/* Le contour de la pilule tient lieu d'indicateur de focus. */
+.cups-lab .chat-composer input:focus-visible { outline: 0; }
+.chat-composer:focus-within { box-shadow: 0 0 0 1px var(--lab-text); }
+.chat-composer input::placeholder { color: var(--lab-muted); }
+.chat-composer button { display: grid; place-items: center; width: 34px; height: 34px; flex-shrink: 0; border: 0; border-radius: 50%; background: var(--lab-text); color: var(--lab-bg); cursor: pointer; transition: opacity 0.15s; }
+.chat-composer button:disabled { opacity: 0.25; cursor: default; }
+.chat-composer svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .design-swatch { display: block; width: 72px; height: 50px; flex-shrink: 0; border-radius: 4px; }
 .cup-viewport.is-turntable { cursor: grab; touch-action: none; border-radius: 8px; }
 .cup-viewport.is-turntable:active { cursor: grabbing; }

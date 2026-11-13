@@ -151,6 +151,7 @@ export function createPerformer(seed = 1) {
   const look: [number, number] = [0, 0]
   const turn: [number, number] = [0, 0]
   let steam = 0
+  let glance: [number, number] | undefined
 
   function show(next: ExpressionId) {
     if (next === shown) return
@@ -246,6 +247,10 @@ export function createPerformer(seed = 1) {
       }
       lookX = thinkSide * 0.55 + (pointer.active ? pointer.x * 0.12 : 0)
       lookY = pointer.active ? pointer.y * 0.1 : 0
+    } else if (glance) {
+      // Elle regarde ce qu'on lui montre, sans tout à fait lâcher le curseur.
+      lookX = glance[0] + (pointer.active ? pointer.x * 0.2 : 0)
+      lookY = glance[1] + (pointer.active ? pointer.y * 0.1 : 0)
     } else if (pointer.active) {
       lookX = pointer.x * personality.attention
       lookY = pointer.y * personality.attention
@@ -269,7 +274,7 @@ export function createPerformer(seed = 1) {
 
     const face = inflate(values, [open, open])
     // Le regard propre à l'expression s'efface en partie devant ce que la tasse regarde.
-    const own = pointer.active && !thinking ? 0.35 : 1
+    const own = (pointer.active || glance) && !thinking ? 0.35 : 1
     face.gaze = [Math.max(-1, Math.min(1, face.gaze[0] * own + look[0])), Math.max(-1, Math.min(1, face.gaze[1] * own + look[1]))]
 
     // Les petits mouvements partent au changement d'expression, puis s'éteignent.
@@ -292,6 +297,10 @@ export function createPerformer(seed = 1) {
       if (!EXPRESSION_BY_ID.has(id)) throw new Error(`Unknown expression: ${id}`)
       chosen = id
       idleShown = undefined
+    },
+    // Un point à regarder, de -1 à 1, plutôt que le curseur : la zone de saisie, par exemple.
+    lookAt(target?: [number, number]) {
+      glance = target
     },
     setThinking(value: boolean) {
       thinking = value

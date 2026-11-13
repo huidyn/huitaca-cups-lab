@@ -846,6 +846,61 @@ describe('cup lab cultural section', () => {
       expect(act().face.eyes[0].w).toBeCloseTo(lively.face.eyes[0].w, 9)
     })
 
+    it('listens as soon as you type under the cup, then thinks and replies to what you sent', async () => {
+      await mount()
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+      await chooseStudy('Expressions')
+      expect(root.querySelector('.chat-composer')).toBeNull()
+      await chooseStudy('Personalities')
+      const calls = vi.mocked(createCupGallery).mock.calls.length
+      const input = root.querySelector<HTMLInputElement>('.chat-composer input')!
+      const send = root.querySelector<HTMLButtonElement>('.chat-composer button')!
+      const type = async (value: string) => {
+        input.value = value
+        input.dispatchEvent(new Event('input'))
+        await nextTick()
+      }
+      expect(root.querySelector('.cup-stage')!.contains(input)).toBe(true)
+      expect(send.disabled).toBe(true)
+      expect(act().expression).toBe('neutral')
+      await type('h')
+      expect(act()).toMatchObject({ expression: 'attentive', steam: 0 })
+      expect(root.querySelector('.chat-heading button')?.textContent).toBe('Play')
+      expect(send.disabled).toBe(false)
+      // Des espaces ne sont pas un message, et une zone vidée rend la tasse à son repos.
+      await type('   ')
+      expect(act().expression).toBe('neutral')
+      expect(send.disabled).toBe(true)
+      await type('hello there')
+      expect(act().expression).toBe('attentive')
+      root.querySelector<HTMLFormElement>('.chat-composer')!.dispatchEvent(new Event('submit', { cancelable: true }))
+      await nextTick()
+      expect(input.value).toBe('')
+      expect(root.querySelector('.chat-user')?.textContent).toBe('hello there')
+      expect(root.querySelector('.steam-indicator')).not.toBeNull()
+      expect(act()).toMatchObject({ expression: 'thinking', steam: 1 })
+      vi.advanceTimersByTime(2400)
+      await nextTick()
+      expect(root.querySelector('.steam-indicator')).toBeNull()
+      expect(root.querySelector('.chat-agent')?.textContent).toBe('Happy to help with that.')
+      expect(act()).toMatchObject({ expression: 'happy', steam: 0 })
+      // Écrire pendant la réponse ne la coupe pas ; ensuite la tasse écoute de nouveau.
+      await type('and')
+      expect(act().expression).toBe('happy')
+      vi.advanceTimersByTime(3600)
+      await nextTick()
+      expect(act().expression).toBe('attentive')
+      await type('')
+      expect(act().expression).toBe('neutral')
+      expect(root.querySelector('.chat-agent')?.textContent).toBe('Happy to help with that.')
+      expect(createCupGallery).toHaveBeenCalledTimes(calls)
+      // Relancer la conversation jouée oublie notre message.
+      root.querySelector<HTMLButtonElement>('.chat-heading button')!.click()
+      await nextTick()
+      expect(root.querySelector('.chat-thread')?.getAttribute('data-phase')).toBe('idle')
+      expect(root.querySelector('.chat-user')).toBeNull()
+    })
+
     it('keeps the 3D cup with reduced motion, and falls back to the still without WebGL', async () => {
       await mount(true)
       await chooseStudy('Expressions')

@@ -37,6 +37,17 @@ const EXCHANGES: { user: string; expression: ExpressionId; reply: string }[] = [
   { user: 'Does this sentence make sense?', expression: 'confused', reply: 'Not quite. Which part is the verb?' },
   { user: 'Thanks, that fixed it.', expression: 'happy', reply: 'Glad it worked.' }
 ]
+// Ce que la tasse répond quand on lui écrit soi-même : des réponses toutes faites, à tour de rôle.
+const REPLIES: { expression: ExpressionId; reply: string }[] = [
+  { expression: 'happy', reply: 'Happy to help with that.' },
+  { expression: 'curious', reply: 'Interesting. Tell me more?' },
+  { expression: 'delighted', reply: 'Oh, I love that!' },
+  { expression: 'skeptical', reply: 'Hmm. Are you sure about that?' },
+  { expression: 'surprised', reply: 'Wait, really?' },
+  { expression: 'focused', reply: 'Right. Let me get that sorted.' }
+]
+const OWN_THINKING = 2400
+const OWN_REPLYING = 3600
 type Phase = 'idle' | 'listening' | 'thinking' | 'replying'
 const PHASES: Record<Phase, { next: Phase; ms: number }> = {
   idle: { next: 'listening', ms: 2600 },
@@ -97,10 +108,47 @@ const glyphs = Object.fromEntries(EXPRESSIONS.map(option => [option.id, expressi
 const restGlyphs = Object.fromEntries(PERSONALITIES.map(option => [option.id, expressionGlyph(option.rest)]))
 const emotive = computed(() => study.value === 'expressions' || study.value === 'personalities')
 const conversing = computed(() => study.value === 'personalities' && playing.value)
-const isThinking = computed(() => conversing.value && phase.value === 'thinking')
-// Ce que l'agent a choisi de montrer à cet instant.
-const acted = computed<ExpressionId>(() => !conversing.value ? expressionId.value
-  : phase.value === 'listening' ? 'attentive' : phase.value === 'replying' ? EXCHANGES[exchange.value]!.expression : 'neutral')
+// Le message qu'on écrit soi-même sous la tasse, et où en est sa réponse.
+const draft = ref('')
+const own = ref<{ user: string; expression: ExpressionId; reply: string }>()
+const ownPhase = ref<'thinking' | 'replying' | 'done'>('done')
+let ownTimer: ReturnType<typeof setTimeout> | undefined
+let replyIndex = 0
+const typing = computed(() => study.value === 'personalities' && draft.value.trim().length > 0)
+const shownExchange = computed(() => own.value ?? (exchange.value >= 0 ? EXCHANGES[exchange.value] : undefined))
+const threadPhase = computed(() => own.value ? ownPhase.value : conversing.value ? phase.value : 'paused')
+const replied = computed(() => own.value ? ownPhase.value !== 'thinking' : phase.value === 'replying' || phase.value === 'idle')
+const isThinking = computed(() => study.value === 'personalities' && (own.value ? ownPhase.value === 'thinking' : conversing.value && phase.value === 'thinking'))
+// Ce que l'agent a choisi de montrer à cet instant. Dès qu'on lui écrit, la tasse écoute.
+const acted = computed<ExpressionId>(() => study.value !== 'personalities' ? expressionId.value
+  : own.value && ownPhase.value === 'replying' ? own.value.expression
+    : typing.value ? 'attentive'
+      : own.value ? 'neutral'
+        : !conversing.value ? expressionId.value
+          : phase.value === 'listening' ? 'attentive' : phase.value === 'replying' ? EXCHANGES[exchange.value]!.expression : 'neutral')
+// Écrire met la conversation jouée en pause : c'est à nous que la tasse prête attention.
+watch(typing, value => {
+  if (!value) return
+  playing.value = false
+  expressionId.value = 'neutral'
+})
+function send() {
+  const user = draft.value.trim()
+  if (!user) return
+  own.value = { user, ...REPLIES[replyIndex++ % REPLIES.length]! }
+  ownPhase.value = 'thinking'
+  draft.value = ''
+  clearTimeout(ownTimer)
+  ownTimer = setTimeout(() => {
+    ownPhase.value = 'replying'
+    ownTimer = setTimeout(() => { ownPhase.value = 'done' }, OWN_REPLYING)
+  }, OWN_THINKING)
+}
+function forgetOwn() {
+  clearTimeout(ownTimer)
+  own.value = undefined
+  ownPhase.value = 'done'
+}
 const actedName = computed(() => isThinking.value ? 'Thinking' : EXPRESSION_BY_ID.get(acted.value)!.name)
 let phaseTimer: ReturnType<typeof setTimeout> | undefined
 watch([conversing, phase], () => {
@@ -112,22 +160,28 @@ watch([conversing, phase], () => {
     phase.value = next
   }, PHASES[phase.value].ms)
 }, { immediate: true })
-watch([study, acted, isThinking, personalityId], () => {
+watch([study, acted, isThinking, personalityId, typing], () => {
   // La planche des expressions tient la pose, dans la personnalité par défaut.
   performer.setPersonality(study.value === 'personalities' ? personalityId.value : DEFAULT_PERSONALITY)
   performer.setIdle(study.value === 'personalities')
   performer.express(acted.value)
   performer.setThinking(isThinking.value)
+  // La zone de saisie est sous la tasse : en écoutant, elle baisse les yeux vers ce qu'on écrit.
+  performer.lookAt(typing.value ? [0, -0.9] : undefined)
   gallery?.refresh()
 }, { immediate: true })
 watch(theme, value => gallery?.setSteamColor(STEAM[value]))
 function tryExpression(id: ExpressionId) {
+  forgetOwn()
   expressionId.value = id
   playing.value = false
 }
 function toggleConversation() {
   playing.value = !playing.value
-  if (playing.value) phase.value = 'idle'
+  if (!playing.value) return
+  forgetOwn()
+  draft.value = ''
+  phase.value = 'idle'
 }
 // Chaque tasse repart de son option par défaut : une tasse culturelle ne garde pas la
 // couleur de la précédente, et le motif d'une autre tasse ne s'applique pas. D'une tasse
@@ -303,6 +357,7 @@ onUnmounted(() => {
   disposed = true
   media?.removeEventListener('change', syncMotion)
   clearTimeout(phaseTimer)
+  clearTimeout(ownTimer)
   gallery?.dispose()
 })
 </script>
@@ -374,6 +429,12 @@ onUnmounted(() => {
               <div class="cup-viewport" role="img" aria-label="The same cup at sidebar size, 48 pixels" />
               <span>48 px</span>
             </div>
+            <form v-if="study === 'personalities'" class="chat-composer" @submit.prevent="send">
+              <input v-model="draft" type="text" aria-label="Message the cup" placeholder="Say something to the cup…" autocomplete="off" />
+              <button type="submit" :disabled="!draft.trim()" aria-label="Send">
+                <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 13V3M3.5 7.5 8 3l4.5 4.5" /></svg>
+              </button>
+            </form>
           </div>
 
           <fieldset v-if="study === 'colours'" class="palette-picker colour-picker">
@@ -485,8 +546,8 @@ onUnmounted(() => {
                 <p class="editor-group">In a conversation</p>
                 <button type="button" :aria-pressed="playing" @click="toggleConversation">{{ playing ? 'Pause' : 'Play' }}</button>
               </div>
-              <div class="chat-thread" :data-phase="conversing ? phase : 'paused'">
-                <p v-if="exchange >= 0" class="chat-bubble chat-user">{{ EXCHANGES[exchange]!.user }}</p>
+              <div class="chat-thread" :data-phase="threadPhase">
+                <p v-if="shownExchange" class="chat-bubble chat-user">{{ shownExchange.user }}</p>
                 <p v-if="isThinking" class="chat-bubble chat-agent chat-thinking">
                   <svg class="steam-indicator" viewBox="0 0 30 24" role="img" aria-label="Thinking">
                     <path pathLength="1" d="M7 21C4 17 10 14 7 10S10 5 7 3" />
@@ -494,10 +555,10 @@ onUnmounted(() => {
                     <path pathLength="1" d="M23 21C20 17 26 14 23 10S26 5 23 3" />
                   </svg>
                 </p>
-                <p v-else-if="exchange >= 0 && (phase === 'replying' || phase === 'idle')" class="chat-bubble chat-agent">{{ EXCHANGES[exchange]!.reply }}</p>
-                <p v-if="exchange < 0" class="chat-empty">A new message is on its way…</p>
+                <p v-else-if="shownExchange && replied" class="chat-bubble chat-agent">{{ shownExchange.reply }}</p>
+                <p v-if="!shownExchange" class="chat-empty">A new message is on its way…</p>
               </div>
-              <p class="palette-note">While it thinks, steam rises from the cup. In the chat, the same three wisps stand in for the usual dots.</p>
+              <p class="palette-note">While it thinks, steam rises from the cup. In the chat, the same three wisps stand in for the usual dots. Write to it under the cup: it listens as soon as you type. Its replies are canned.</p>
             </div>
 
             <fieldset class="palette-picker editor-section">
