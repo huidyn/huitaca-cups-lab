@@ -126,8 +126,9 @@ a { color: inherit; }
 .chat-thread { display: flex; flex-direction: column; gap: 8px; min-height: 108px; padding: 14px; border: 1px solid var(--lab-border); border-radius: 14px; }
 .chat-bubble { max-width: 82%; margin: 0; padding: 9px 13px; border-radius: 16px; font-size: 13px; line-height: 1.4; }
 .chat-user { align-self: flex-end; background: var(--lab-text); color: var(--lab-bg); border-bottom-right-radius: 5px; }
-.chat-agent { align-self: flex-start; background: var(--lab-active); border-bottom-left-radius: 5px; }
-.chat-thinking { padding: 6px 12px 4px; }
+/* La réponse de l'agent n'a pas de bulle : le texte va d'un bord à l'autre, comme dans l'app. */
+.chat-agent { align-self: stretch; max-width: none; padding: 4px 2px 0; border-radius: 0; }
+.chat-thinking { padding: 2px 0 0; }
 .chat-empty { margin: auto; color: var(--lab-muted); font-size: 12px; }
 /* La vapeur dans le fil : trois rubans qui montent, à la place des trois points. */
 .steam-indicator { display: block; width: 30px; height: 24px; fill: none; stroke: var(--lab-muted); stroke-width: 2.4; stroke-linecap: round; }
