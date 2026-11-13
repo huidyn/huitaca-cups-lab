@@ -23,7 +23,7 @@ export interface Scenario {
 export const SCENARIOS: Scenario[] = [
   { id: 'hero', label: 'One large cup', cups: 1, size: 320 },
   { id: 'sidebar', label: 'Sidebar, 10 agents, hovered one live', cups: 10, size: 32, resting: true },
-  { id: 'thinking', label: 'Sidebar, 3 thinking and one hovered', cups: 10, size: 32, resting: true, thinking: 3 }
+  { id: 'thinking', label: 'Sidebar, open agent thinking, one hovered', cups: 10, size: 32, resting: true, thinking: 1 }
 ]
 // Ralentissement simulé du processeur : l'image attend (k - 1) fois son propre coût.
 export const SLOWDOWNS = [1, 2, 4, 6]

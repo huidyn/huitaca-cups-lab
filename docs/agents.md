@@ -40,27 +40,25 @@ pixels is stretched, which blurred the live cup and moved it by a pixel next to 
 
 ### Agents that think
 
-Who thinks is live status from the App, never part of the stored look. The sidebar takes it per
-agent and decides who gets the full 3D treatment:
+Who thinks is live status from the App, never part of the stored look.
 
-- **Live slots** (`LIVE_SLOTS`, `quality.ts`): 3 at high, 2 at balanced, 1 at low, 0 at static.
-  They go to the thinking agents nearest the top of what is *visible* in the list (the App sorts
-  by last conversation, so that is where they usually are). The hovered row always gets one more.
-  A row scrolled out of view gives its slot back.
+- **Everyone who thinks** keeps their image and gets a small SVG steam over it (`.agent-steam`).
+  The whole box rises and fades (`transform` and `opacity` only), so the browser hands it to the
+  graphics card and repaints nothing, even with 40 agents. Duration and delay vary per row
+  (`--phase`), so no two agents steam in unison. Static with reduced motion.
+- **Two cups at most are live** with their own personality and real steam: the agent that is
+  open, and the one under the pointer. That bound does not grow with the number of agents.
+  A first version gave 1 to 3 "live slots" to visible thinkers; it slowed the page down (a
+  thinker reshapes its eyes and steam on every frame and never settles, unlike a hover) and was
+  removed.
 - **A live thinker** (`GalleryOptions.act`, `setActing(i, on)`) is driven by its own performer
-  (`createPerformer(seed)`, seed from the agent id, personality from its look), with real steam.
-  Its pose is blended in from the resting pose over `ACT_BLEND` (0.45 s).
-- **No unison.** Each agent has its own seed, so blinks, glances and the thinking look fall at
-  different times even for two agents with the same personality; each steam reads the clock with
-  its own offset (`STEAM_PHASE`).
-- **The others** keep their image and get a small SVG steam over it (`.agent-steam`): three wisps
-  with three different periods and a per-row delay (`--phase`), animated by CSS only. Static with
-  reduced motion.
-- **Stopping.** `setActing(i, false)` and `performer.setThinking(false)`: the steam fades by
-  itself, the pose blends back to rest, and only when the blend is at 0 and the steam is gone is
-  the cup no longer drawn and its image returns. Weight 0 *is* the image, so nothing jumps.
-- **Cadence.** Thinking alone runs at 30 fps at most (`ACT_FPS`); a hover brings back the level's
-  own cadence.
+  (`createPerformer(seed)`, seed from the agent id, personality from its look). Its pose is
+  blended in from the resting pose over `ACT_BLEND` (0.45 s), and back when it stops: only when
+  the blend is at 0 and the steam is gone does its image return.
+- **While the list scrolls, everything is an image** (`gallery.sleep()`): the browser scrolls
+  the list before the canvas can be redrawn, so a live cup would trail behind its row. Life
+  resumes 160 ms after the last scroll event.
+- **Cadence.** Thinking alone runs at 30 fps at most (`ACT_FPS`).
 
 The page offers cases rather than a count, on 40 agents: nobody, light (the latest agent), heavy
 (five near the top and one near the bottom), everybody.
@@ -74,8 +72,7 @@ Not from a spec sheet. Three steps, in order of trust:
 2. **Measurement while it runs** (`createGovernor`): the 95th percentile of CPU time per frame
    against the 6 ms budget, *and* the cadence actually held. GPU time is not readable from a
    page, but a GPU that cannot keep up shows as missed frames, which is why cadence counts.
-   When a level is over, it steps down: fewer live slots first of all, then density and cadence
-   (one level carries all three).
+   When a level is over, it steps down (lower density and cadence), down to static images.
 3. **Memory** (`localStorage`, `cups.quality`): the level reached is kept, so the next visit
    starts there and does not stutter its way down again.
 
@@ -165,14 +162,14 @@ being built, tested or opened in a browser. To check, in this order:
 
 1. `pnpm build`, then `pnpm test`. Expected to need updates: `AgentSidebar.test.ts` and the
    sidebar test in `CupsLab.test.ts` (the list is 40 agents now, the counts are 10/20/40, the
-   gallery mock needs `setActing` and `setSteamColor`, `snapshot` is called in batches of 8),
+   gallery mock needs `setActing`, `sleep` and `setSteamColor`, `snapshot` is called in batches of 8),
    `renderer.test.ts` (resting mode now sizes the canvas from its parent and calls
-   `setViewport` through `place()`), `quality.test.ts` (new `LIVE_SLOTS`, `suggestTier`,
-   `lowerTier`), and anything asserting the bench scenarios (a third one, `thinking`).
+   `setViewport` through `place()`), `quality.test.ts` (new `suggestTier`, `lowerTier`), and anything asserting the bench scenarios (a third one, `thinking`).
 2. In the browser, page 08, light and dark: hover in and out of a row and look for any 1 px
    shift or colour change between image and live cup, at 100 %, 125 % and 150 % display scaling.
-3. Thinking cases: *Light*, *Heavy*, *Everybody*. Live thinkers must not move in unison; the
-   others show the SVG steam; switching to *Nobody* must ease each one back to its image, and
-   the frame counter must then stop.
-4. Scroll the list while *Everybody* thinks: slots follow what is visible.
+3. Thinking cases: *Light*, *Heavy*, *Everybody*. Only the open agent (click a thinking one) and
+   the hovered one are live; everyone else shows the SVG steam, out of unison; *Nobody* must ease
+   the live one back to its image, and the frame counter must then stop.
+4. Scroll the list while *Everybody* thinks: no cup trails behind its row, nothing is live until
+   the scroll stops, and the page stays smooth.
 5. Measure: the third scenario, and that *Idle* is 0 for both sidebar scenarios.

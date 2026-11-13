@@ -659,6 +659,22 @@ export function createCupGallery(canvas: HTMLCanvasElement, views: CupView[], op
       entry.acting = value
       invalidate()
     },
+    // Mode repos : tout le monde redevient image, tout de suite et sans retour en douceur. Pour le
+    // défilement : la liste bouge avant que le canevas ne soit redessiné, donc une tasse vivante
+    // traînerait derrière sa rangée. Le canevas est vidé dans la même tâche.
+    sleep() {
+      if (!resting) return
+      for (const entry of entries) {
+        entry.awake = entry.acting = false
+        entry.act = entry.steamLevel = 0
+        entry.x = entry.bx = entry.tx = resting.x
+        entry.y = entry.by = entry.ty = resting.y
+        entry.settled = true
+        if (entry.steam) entry.steam.group.visible = false
+        pose(entry, 0)
+      }
+      draw()
+    },
     // Images de repos, faites par ce rendu-ci, dans ce canevas-ci, à la taille et la densité
     // où la tasse vivante sera dessinée : le passage de l'image à la 3D ne se voit pas.
     // Rend une image (data URL) par indice, ou undefined si le canevas n'a pas la place.

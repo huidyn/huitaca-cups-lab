@@ -5,7 +5,7 @@ import {
 } from './agent-look'
 import { AVATAR_FRAME, flatCup } from './cup2d'
 import { editorLook } from './editor'
-import { createGovernor, LIVE_SLOTS, lowerTier, QUALITY, type QualityId, suggestTier } from './quality'
+import { createGovernor, lowerTier, QUALITY, type QualityId, suggestTier } from './quality'
 import { createPerformer, type Performer } from './personality'
 import { STEAM } from './steam'
 import { type BenchResult, deviceInfo, gpuName, runScenario, SCENARIOS, SLOWDOWNS } from './bench'
@@ -16,6 +16,8 @@ import './agents.css'
 const REST = { x: 0.6, y: 0 }
 // Images de repos déjà faites, pour toute la session (une page qui revient ne les refait pas).
 const STILLS: Record<string, string> = {}
+// Sans défilement depuis ce délai, les tasses peuvent revivre.
+const SCROLL_REST_MS = 160
 // Images prises par lot, en rendant la main entre deux : 40 agents ne bloquent pas la page.
 const STILL_BATCH = 8
 // Le niveau où le juge s'est arrêté, retenu d'une visite à l'autre : on ne refait pas la descente.
@@ -110,23 +112,19 @@ const still = (row: { key: string }) => flat.value ? undefined : stills.value[st
 // Les rangées dont la tasse est dessinée en 3D en ce moment (survolée, qui réfléchit, ou qui revient au repos).
 const live = ref(new Set<number>())
 const hovered = ref<number>()
-// Rangées visibles dans la liste : une tasse hors de vue ne prend pas de place vivante.
-const range = ref({ first: 0, last: 12 })
+// Pendant que la liste défile, tout est image : une tasse vivante traînerait derrière sa rangée.
+const scrolling = ref(false)
 const thinking = computed(() => new Set(thinkingRows(activity.value, rows.value.length)))
-// Places vivantes pour ceux qui réfléchissent, selon le niveau ; aucune sans 3D ou sans mouvement.
-const slots = computed(() => flat.value || reduced.value ? 0 : LIVE_SLOTS[tier.value])
-// Ceux qui réfléchissent en 3D : les premiers visibles depuis le haut, dans la limite des places,
-// plus celui qu'on survole s'il réfléchit. Les autres gardent leur image, avec la vapeur dessinée.
+// Ceux qui réfléchissent en 3D, avec leur personnalité : l'agent ouvert (celui qu'on regarde) et
+// celui qu'on survole, pas plus. Deux tasses vivantes au pire, qu'il y ait 10 agents ou 40.
+// Tous les autres gardent leur image, avec la vapeur dessinée par-dessus.
 const actors = computed(() => {
   const chosen = new Set<number>()
-  if (flat.value || reduced.value) return chosen
-  for (const index of thinking.value) {
-    if (chosen.size >= slots.value) break
-    if (index < range.value.first || index > range.value.last || !still(rows.value[index]!)) continue
-    chosen.add(index)
+  if (flat.value || reduced.value || scrolling.value) return chosen
+  const open = rows.value.findIndex(row => row.id === selected.value)
+  for (const index of [open, hovered.value]) {
+    if (index !== undefined && index >= 0 && thinking.value.has(index) && still(rows.value[index]!)) chosen.add(index)
   }
-  const over = hovered.value
-  if (over !== undefined && thinking.value.has(over) && still(rows.value[over]!)) chosen.add(over)
   return chosen
 })
 // Un interprète par agent, créé à la demande, avec sa personnalité et sa propre graine.
@@ -160,14 +158,6 @@ function cast() {
 }
 // Décalage de la vapeur dessinée, propre à chaque rangée : jamais deux volutes au même instant.
 const phase = (index: number) => ((index * 0.618) % 1 * 3).toFixed(2)
-function measureRange() {
-  const list = scroller.value
-  const row = size.value + 12
-  if (!list || !list.clientHeight) return
-  const first = Math.floor(list.scrollTop / row)
-  const last = Math.ceil((list.scrollTop + list.clientHeight) / row) - 1
-  if (first !== range.value.first || last !== range.value.last) range.value = { first, last }
-}
 
 const canvas = ref<HTMLCanvasElement>()
 const scroller = ref<HTMLElement>()
@@ -214,7 +204,6 @@ async function start() {
         }
       }
     })
-    measureRange()
     cast()
     await photograph()
   } catch {
@@ -267,7 +256,6 @@ watch(() => props.theme, value => gallery?.setSteamColor(STEAM.colors[value]))
 // Le panneau replié change la place des tasses sans changer leur taille : on redessine.
 watch([collapsed, size], async () => {
   await nextTick()
-  measureRange()
   gallery?.refresh()
   void photograph()
 })
@@ -278,17 +266,29 @@ function enter(event: PointerEvent, index: number) {
   if (event.pointerType === 'touch' || reduced.value || !gallery || !still(rows.value[index]!)) return
   if (hovered.value !== undefined && hovered.value !== index) gallery.rest(hovered.value)
   hovered.value = index
-  gallery.wake(index)
+  // Pendant le défilement, les rangées passent sous le curseur : on retient la dernière, sans la réveiller.
+  if (!scrolling.value) gallery.wake(index)
 }
 function exit(index: number) {
   if (hovered.value === index) hovered.value = undefined
   gallery?.rest(index)
 }
-// La liste défile sous un canevas fixe : les tasses vivantes doivent suivre leur rangée,
-// et les places vivantes vont à ceux qu'on voit.
+// La liste défile sous un canevas fixe, et le navigateur la fait défiler avant que le canevas ne soit
+// redessiné : dès le premier mouvement, tout redevient image d'un coup ; la vie reprend à l'arrêt.
+let scrollTimer = 0
 function scrolled() {
-  measureRange()
-  gallery?.refresh()
+  if (!scrolling.value) {
+    scrolling.value = true
+    for (const index of acting) performerOf(index).setThinking(false)
+    acting = new Set()
+    gallery?.sleep()
+  }
+  clearTimeout(scrollTimer)
+  scrollTimer = window.setTimeout(() => {
+    scrolling.value = false
+    const over = hovered.value
+    if (over !== undefined && !reduced.value && rows.value[over] && still(rows.value[over])) gallery?.wake(over)
+  }, SCROLL_REST_MS)
 }
 
 function syncMotion() {
@@ -334,13 +334,13 @@ onMounted(() => {
   const hint = suggestTier({ cores: nav.hardwareConcurrency, memoryGb: nav.deviceMemory, saveData: nav.connection?.saveData })
   const remembered = rememberedTier()
   tier.value = remembered ? lowerTier(hint, remembered) : hint
-  measureRange()
   soon(() => { void start() })
 })
 onUnmounted(() => {
   disposed = true
   media?.removeEventListener('change', syncMotion)
   observer?.disconnect()
+  clearTimeout(scrollTimer)
   gallery?.dispose()
 })
 </script>
@@ -376,9 +376,7 @@ onUnmounted(() => {
                   <img v-if="still(row)" class="agent-still" :src="still(row)" alt="" draggable="false" />
                   <!-- Il réfléchit sans place vivante : la vapeur est dessinée par-dessus son image. -->
                   <svg v-if="thinking.has(index) && !actors.has(index)" class="agent-steam" viewBox="0 0 32 32" :style="{ '--phase': phase(index) }" focusable="false">
-                    <path d="M11 12c-2-2.4 2-3.6 0-6s2-3.2 0.4-5" />
-                    <path d="M16 11c2-2.6-2-3.8 0-6.4s-1.6-3 0-4.4" />
-                    <path d="M21 12c-1.8-2.2 1.8-3.4 0-5.6s1.8-3 0.2-4.8" />
+                    <path d="M11 12c-2-2.4 2-3.6 0-6s2-3.2 0.4-5M16 11c2-2.6-2-3.8 0-6.4s-1.6-3 0-4.4M21 12c-1.8-2.2 1.8-3.4 0-5.6s1.8-3 0.2-4.8" />
                   </svg>
                   <svg v-if="!still(row)" class="flat-cup" :viewBox="row.flat.box.join(' ')" :style="{ '--gx': REST.x, '--gy': REST.y }" focusable="false">
                     <path v-for="(shape, i) in row.flat.shapes" :key="i" :d="shape.d" :fill="shape.fill" :stroke="shape.stroke" :stroke-width="shape.width" stroke-linejoin="round" />
@@ -429,7 +427,7 @@ onUnmounted(() => {
           </div>
           <label class="agents-check"><input v-model="adaptive" type="checkbox" :disabled="flat" /> Step down by itself when frames run over budget</label>
           <p class="agents-note">At rest every agent is a still image of its own 3D cup, looking right. Hovering a row brings that one cup to life in the shared canvas; leaving lets it look back, then hands over to the image again. Nothing is drawn while nobody thinks and the pointer is elsewhere.</p>
-          <p class="agents-note">An agent that thinks comes to life too, with its own personality and steam: up to {{ slots }} at once at this quality, taken from the top of what is visible, plus the hovered one. The others keep their image with a light steam drawn over it. When one stops, it eases back to its resting pose before its image returns.</p>
+          <p class="agents-note">Thinking shows as a light steam drawn over the image. Only two cups can be live with their own personality and real steam: the agent that is open (click one) and the one under the pointer. While the list scrolls, everything is an image.</p>
           <p v-if="reduced" class="agents-note">Reduced motion is on: the cups stay still images, even on hover.</p>
           <p v-if="notice" class="agents-note" role="status">{{ notice }}</p>
         </div>

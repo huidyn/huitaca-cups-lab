@@ -18,11 +18,6 @@ export const QUALITY: Record<QualityId, Quality> = {
 }
 export const QUALITY_ORDER: QualityId[] = ['high', 'balanced', 'low', 'static']
 
-// Combien d'agents qui réfléchissent sont vivants (3D) en même temps, en plus de celui qu'on survole.
-// Les autres gardent leur image, avec une vapeur dessinée par-dessus. C'est le premier réglage à
-// baisser sur un appareil modeste : il divise le coût sans rien enlaidir.
-export const LIVE_SLOTS: Record<QualityId, number> = { high: 3, balanced: 2, low: 1, static: 0 }
-
 // Point de départ d'après ce que l'appareil dit de lui-même. Ce n'est qu'un indice (les navigateurs
 // arrondissent ces valeurs, et certains les taisent) : c'est le juge, d'après les images réellement
 // dessinées, qui décide ensuite.
