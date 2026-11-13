@@ -1,0 +1,69 @@
+/* Page 08 : la barre latérale des agents, en maquette. Les gris sont des emplacements. */
+.agents-workspace { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 56px; align-items: start; }
+.agents-demo { position: sticky; top: 24px; }
+.agents-caption { margin: 14px 0 0; font-size: 11px; color: var(--lab-muted); }
+
+.side { display: flex; flex-direction: column; width: 280px; height: 640px; padding: 12px 10px; border: 1px solid var(--lab-border); border-radius: 14px; background: var(--lab-bg); overflow: hidden; }
+.side.is-collapsed { width: 64px; padding-inline: 8px; }
+.sk { display: block; flex: none; background: var(--lab-active); border-radius: 4px; }
+.sk-logo { width: 40px; height: 40px; border-radius: 10px; }
+.sk-line { height: 9px; border-radius: 999px; }
+.sk-small { height: 7px; }
+.sk-chevron { width: 16px; height: 16px; border-radius: 4px; margin-left: auto; }
+.sk-icon { width: 18px; height: 18px; border-radius: 5px; }
+.sk-avatar { width: 32px; height: 32px; border-radius: 50%; }
+.side-org { display: flex; align-items: center; gap: 8px; padding: 4px; }
+.side.is-collapsed .side-org, .side.is-collapsed .side-item, .side.is-collapsed .side-account { justify-content: center; }
+.side-org-text { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+.side-nav { display: flex; flex-direction: column; gap: 2px; margin-top: 12px; }
+.side-item { display: flex; align-items: center; gap: 12px; height: 36px; padding: 0 10px; }
+.side-label { margin: 16px 0 6px; padding: 0 4px; font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--lab-muted); }
+.side.is-collapsed .side-list-wrap { margin-top: 16px; }
+
+.side-list-wrap { position: relative; flex: 1; min-height: 0; overflow: hidden; }
+.side-canvas { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; pointer-events: none; }
+.side-canvas.is-hidden { display: none; }
+.side-list { height: 100%; margin: 0; padding: 0; list-style: none; overflow-y: auto; scrollbar-width: thin; }
+.side-agent { display: flex; align-items: center; gap: 10px; width: 100%; padding: 6px 8px; border: 0; border-radius: 10px; background: transparent; color: var(--lab-text); text-align: start; cursor: pointer; transition: background 0.1s linear; }
+.side-agent:hover { background: color-mix(in srgb, var(--lab-active) 55%, transparent); }
+.side-agent.is-current { background: var(--lab-active); }
+.side-agent:focus-visible { outline: 2px solid var(--lab-text); outline-offset: -2px; }
+.side.is-collapsed .side-agent { justify-content: center; padding-inline: 0; }
+/* La boîte de la tasse est carrée et fixe : 3D ou 2D, la rangée garde la même hauteur. */
+.agent-cup { display: block; flex: none; width: var(--cup); height: var(--cup); }
+.agent-viewport, .flat-cup { display: block; width: 100%; height: 100%; }
+.agent-name { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 14px; font-weight: 500; }
+.flat-eyes { transform: translate(calc(var(--gx, 0) * 0.11px), calc(var(--gy, 0) * -0.1px)); transition: transform 0.12s ease-out; }
+@media (prefers-reduced-motion: reduce) { .flat-eyes { transition: none; } }
+
+.side-foot { display: flex; flex-direction: column; gap: 12px; padding-top: 12px; }
+.side-account { display: flex; align-items: center; gap: 10px; }
+
+.agents-panel { min-width: 0; max-width: 620px; }
+.agents-panel > .editor-section + .editor-section { margin-top: 36px; }
+.agents-controls { display: flex; flex-direction: column; gap: 14px; }
+.agents-control { display: flex; align-items: center; gap: 16px; font-size: 12px; color: var(--lab-muted); }
+.agents-control > span { width: 96px; flex: none; }
+.segment { display: flex; flex-wrap: wrap; gap: 3px; }
+.segment button { border: 1px solid var(--lab-border); background: transparent; border-radius: 5px; color: var(--lab-text); padding: 7px 12px; font-size: 12px; cursor: pointer; }
+.segment button[aria-pressed='true'] { background: var(--lab-active); }
+.segment button:disabled { opacity: 0.4; cursor: default; }
+.agents-check { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--lab-muted); }
+.agents-note { margin: 12px 0 0; font-size: 12px; line-height: 1.5; color: var(--lab-muted); }
+.agent-json { margin: 0; padding: 14px 16px; border: 1px solid var(--lab-border); border-radius: 8px; font: 12px/1.5 Consolas, 'Courier New', monospace; white-space: pre-wrap; word-break: break-all; }
+.agents-measure { display: flex; align-items: center; gap: 20px; }
+.agents-measure select, .agents-run { border: 1px solid var(--lab-border); background: transparent; color: var(--lab-text); border-radius: 5px; padding: 7px 12px; font-size: 12px; }
+.agents-run { cursor: pointer; }
+.agents-run:disabled { opacity: 0.5; cursor: default; }
+.agents-results { width: 100%; margin-top: 16px; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+.agents-results th, .agents-results td { padding: 8px 6px; border-bottom: 1px solid var(--lab-border); text-align: right; }
+.agents-results th:first-child, .agents-results td:first-child { text-align: left; }
+.agents-results th { font-weight: 500; color: var(--lab-muted); }
+.agents-results small { display: block; margin-top: 2px; color: var(--lab-muted); }
+.verdict { padding: 2px 8px; border-radius: 999px; background: var(--lab-active); font-size: 11px; }
+.verdict[data-verdict='over'] { background: #b42318; color: #fff; }
+
+@media (max-width: 900px) {
+  .agents-workspace { grid-template-columns: 1fr; gap: 32px; }
+  .agents-demo { position: static; }
+}

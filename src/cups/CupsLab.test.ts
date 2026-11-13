@@ -285,7 +285,7 @@ describe('cup lab cultural section', () => {
     japanese.click()
     await nextTick()
     await chooseCulture('china')
-    expect(root.querySelectorAll('.study-nav button')).toHaveLength(7)
+    expect(root.querySelectorAll('.study-nav button')).toHaveLength(8)
     expect(root.querySelectorAll('canvas')).toHaveLength(1)
     expect(root.querySelectorAll('.cup-viewport')).toHaveLength(1)
     expect(root.querySelectorAll('input[name="cup-design"]')).toHaveLength(3)
@@ -314,7 +314,7 @@ describe('cup lab cultural section', () => {
     await mount()
     await chooseStudy('Designs')
     await chooseCulture('colombia')
-    expect(root.querySelectorAll('.study-nav button')).toHaveLength(7)
+    expect(root.querySelectorAll('.study-nav button')).toHaveLength(8)
     expect(root.querySelectorAll('input[name="cup-design"]')).toHaveLength(3)
     const view = vi.mocked(createCupGallery).mock.calls.at(-1)![1][0]!
     expect(view.vessel.id).toBe('colombian-mug')
@@ -337,7 +337,7 @@ describe('cup lab cultural section', () => {
     await mount()
     await chooseStudy('Designs')
     await chooseCulture('turkiye')
-    expect(root.querySelectorAll('.study-nav button')).toHaveLength(7)
+    expect(root.querySelectorAll('.study-nav button')).toHaveLength(8)
     expect(root.querySelectorAll('input[name="cup-design"]')).toHaveLength(3)
     const view = vi.mocked(createCupGallery).mock.calls.at(-1)![1][0]!
     expect(view.vessel.id).toBe('cay-glass')
@@ -361,7 +361,7 @@ describe('cup lab cultural section', () => {
     await mount()
     await chooseStudy('Designs')
     await chooseCulture('india')
-    expect(root.querySelectorAll('.study-nav button')).toHaveLength(7)
+    expect(root.querySelectorAll('.study-nav button')).toHaveLength(8)
     expect(root.querySelectorAll('input[name="cup-design"]')).toHaveLength(3)
     const view = vi.mocked(createCupGallery).mock.calls.at(-1)![1][0]!
     expect(view.vessel.id).toBe('kulhad')
@@ -912,6 +912,25 @@ describe('cup lab cultural section', () => {
       await nextTick()
       expect(root.querySelector('.chat-thread')?.getAttribute('data-phase')).toBe('idle')
       expect(root.querySelector('.chat-user')).toBeNull()
+    })
+
+    it('opens the sidebar study in place of the cup stage, and gives the stage back on leaving', async () => {
+      await mount()
+      const calls = vi.mocked(createCupGallery).mock.calls.length
+      // Pas de scène de tasses ici : on n'attend donc pas qu'elle soit prête.
+      ;[...root.querySelectorAll<HTMLButtonElement>('.study-nav button')].find(button => button.textContent?.includes('Sidebar'))!.click()
+      await nextTick()
+      expect(root.querySelector('.study-nav button[aria-pressed="true"]')?.textContent).toContain('Sidebar')
+      expect(root.querySelector('#study-title')?.textContent).toBe('Agents, not chats.')
+      expect(root.querySelector('.cup-stage')).toBeNull()
+      expect(root.querySelector('.study-controls')).toBeNull()
+      await vi.waitFor(() => expect(root.querySelectorAll('.side-agent')).toHaveLength(10))
+      // Le sidebar a son propre canevas, un seul pour toute la liste.
+      await vi.waitFor(() => expect(vi.mocked(createCupGallery).mock.calls.length).toBe(calls + 1))
+      expect(root.querySelectorAll('canvas')).toHaveLength(1)
+      await chooseStudy('Shapes')
+      expect(root.querySelector('.side')).toBeNull()
+      await vi.waitFor(() => expect(root.querySelectorAll('.cup-viewport')).toHaveLength(18))
     })
 
     it('keeps the 3D cup with reduced motion, and falls back to the still without WebGL', async () => {

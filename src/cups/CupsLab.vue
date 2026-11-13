@@ -9,12 +9,13 @@ import type { AccessoryId } from './accessories'
 import { collectionFor, DEFAULT_COLOUR, defaultDesign, editorLook, PLAIN } from './editor'
 import { EXPRESSION_BY_ID, expressionGlyph, type ExpressionId, EXPRESSIONS } from './expressions'
 import { createPerformer, DEFAULT_PERSONALITY, PERSONALITIES, type PersonalityId } from './personality'
+import AgentSidebar from './AgentSidebar.vue'
 import './lab.css'
 
 // Le gris du texte discret de chaque thème, comme la vapeur du fil de discussion.
 const STEAM = { light: '#666666', dark: '#a3a3a3' }
 
-type Study = 'shapes' | 'colours' | 'designs' | 'accessories' | 'editor' | 'expressions' | 'personalities'
+type Study = 'shapes' | 'colours' | 'designs' | 'accessories' | 'editor' | 'expressions' | 'personalities' | 'sidebar'
 const STUDIES: Record<Study, { number: string; label: string; eyebrow: string; title: string; description: string }> = {
   shapes: { number: '01', label: 'Shapes', eyebrow: 'STUDY 01 / FORM', title: 'A little character.', description: 'Eighteen shapes. Two eyes. Nothing extra.' },
   colours: { number: '02', label: 'Colours', eyebrow: 'STUDY 02 / COLOUR', title: 'Find its colour.', description: 'Twelve forms. Twelve colours. Pick a cup to try them.' },
@@ -22,7 +23,8 @@ const STUDIES: Record<Study, { number: string; label: string; eyebrow: string; t
   accessories: { number: '04', label: 'Accessories', eyebrow: 'STUDY 04 / ACCESSORIES', title: 'Find the right fit.', description: 'Choose any cup. We’ll add accessories one at a time.' },
   editor: { number: '05', label: 'Editor', eyebrow: 'STUDY 05 / EDITOR', title: 'Make it yours.', description: 'A shape, a colour or a pattern, and an accessory. Everything follows your cursor.' },
   expressions: { number: '06', label: 'Expressions', eyebrow: 'STUDY 06 / EXPRESSION', title: 'Two eyes say it all.', description: 'Sixteen expressions an agent can pick from, on the cup from your editor.' },
-  personalities: { number: '07', label: 'Personalities', eyebrow: 'STUDY 07 / PERSONALITY', title: 'Same feeling, its own way.', description: 'The agent picks the expression. The personality decides how it is played.' }
+  personalities: { number: '07', label: 'Personalities', eyebrow: 'STUDY 07 / PERSONALITY', title: 'Same feeling, its own way.', description: 'The agent picks the expression. The personality decides how it is played.' },
+  sidebar: { number: '08', label: 'Sidebar', eyebrow: 'STUDY 08 / SIDEBAR', title: 'Agents, not chats.', description: 'A sidebar where every agent is a cup, at 24 to 32 px. Compare the shared 3D canvas with a static cup, and measure what each costs.' }
 }
 // Une conversation jouée en boucle : écouter, réfléchir, répondre avec une expression.
 const EXCHANGES: { user: string; expression: ExpressionId; reply: string }[] = [
@@ -397,7 +399,8 @@ onUnmounted(() => {
           <p class="study-description">{{ STUDIES[study].description }}</p>
         </div>
 
-        <div :class="{ 'colour-workspace': single, 'cup-picker-workspace': hasCupPicker, 'editor-workspace': editing || emotive }">
+        <AgentSidebar v-if="study === 'sidebar'" />
+        <div v-else :class="{ 'colour-workspace': single, 'cup-picker-workspace': hasCupPicker, 'editor-workspace': editing || emotive }">
           <label v-if="hasCupPicker" class="culture-control cup-control">Cup
             <select v-model="cupId" aria-label="Cup">
               <optgroup label="Everyday forms">
@@ -632,7 +635,7 @@ onUnmounted(() => {
           </dl>
         </details>
 
-        <div class="study-controls">
+        <div v-if="study !== 'sidebar'" class="study-controls">
           <p class="interaction-hint">{{ fallback ? 'Static previews · WebGL unavailable' : manual ? 'Drag the cup to turn it. Arrow keys work too.' : reduced ? (emotive ? 'Reduced motion · expressions change without animation' : 'Reduced motion · static previews') : emotive ? 'Move your cursor nearby. It looks at you, then drifts off.' : 'Move your cursor. They’re curious.' }}</p>
           <div v-if="!still" class="controls">
             <label class="angle-control">View angle

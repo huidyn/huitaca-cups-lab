@@ -8,6 +8,7 @@ import type { Performance, PointerState } from './personality'
 import { facePose } from './expressions'
 import { createSteam, steamScale } from './steam'
 import { createMorph } from './morph'
+import { QUALITY, type QualityId, type Sample } from './quality'
 
 export interface CupView {
   element: HTMLElement
@@ -36,6 +37,10 @@ export interface GalleryOptions {
   // Une tasse qui joue : expressions, clignements, vapeur. Appelée à chaque image.
   perform?: (dt: number, pointer: PointerState, still: boolean) => Performance
   steamColor?: string
+  // Niveau de rendu (densité de pixels et cadence plafonnées) ; « high » par défaut.
+  quality?: Exclude<QualityId, 'static'>
+  // Appelée après chaque image dessinée, avec ce qu'elle a coûté au processeur.
+  onFrame?: (sample: Sample) => void
 }
 
 // La tasse suit le curseur moins que ses yeux, et plus lentement : c'est le regard qui mène.
@@ -105,6 +110,7 @@ export function createCupGallery(canvas: HTMLCanvasElement, views: CupView[], op
   const textureLimit = Math.min(2048, renderer.capabilities.maxTextureSize)
   const anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy())
   const turntable = options.turntable ?? false
+  let quality = QUALITY[options.quality ?? 'high']
   const framing = options.frame ?? DEFAULT_FRAME
   function build({ vessel, design, accessory, fitVessel }: Omit<CupView, 'element'>) {
     const cup = createCup(vessel, { pattern: Boolean(design && vessel.pattern), accessory, fitVessel })
@@ -222,7 +228,7 @@ export function createCupGallery(canvas: HTMLCanvasElement, views: CupView[], op
   function draw() {
     const bounds = canvas.getBoundingClientRect()
     if (!bounds.width || !bounds.height) return
-    const density = Math.min(window.devicePixelRatio || 1, 2)
+    const density = Math.min(window.devicePixelRatio || 1, quality.density)
     if (renderer.getPixelRatio() !== density ||
         canvas.width !== Math.round(bounds.width * density) ||
         canvas.height !== Math.round(bounds.height * density)) {
@@ -235,6 +241,8 @@ export function createCupGallery(canvas: HTMLCanvasElement, views: CupView[], op
     for (const entry of entries) {
       const box = entry.element.getBoundingClientRect()
       if (!box.width || !box.height) continue
+      // Hors du canevas (liste qui défile) : rien à dessiner, et pas de masque à calculer.
+      if (box.bottom < bounds.top || box.top > bounds.bottom || box.right < bounds.left || box.left > bounds.right) continue
       const { camera } = entry
       camera.left = -framing.halfHeight * box.width / box.height
       camera.right = -camera.left
@@ -251,9 +259,26 @@ export function createCupGallery(canvas: HTMLCanvasElement, views: CupView[], op
     canvas.dataset.frames = String(frames)
   }
 
+  let drawnAt = 0
   function tick(time: number) {
     frame = 0
     if (disposed || document.hidden) return
+    // Cadence plafonnée : on rend la main sans dessiner, et le temps s'accumule dans le prochain dt.
+    if (previousTime && time - previousTime < 1000 / quality.maxFps - 2) {
+      invalidate()
+      return
+    }
+    const started = options.onFrame ? performance.now() : 0
+    const moving = step(time)
+    if (options.onFrame) {
+      options.onFrame({ cost: performance.now() - started, interval: drawnAt ? time - drawnAt : 0 })
+      // Un intervalle ne compte que d'une image à la suivante, sans pause au repos.
+      drawnAt = moving ? time : 0
+    }
+  }
+
+  // Une image ; rend vrai quand quelque chose bouge encore.
+  function step(time: number): boolean {
     const dt = previousTime ? Math.min((time - previousTime) / 1000, 0.05) : 1 / 60
     previousTime = time
     const animate = turning && !reducedMotion.matches
@@ -268,7 +293,7 @@ export function createCupGallery(canvas: HTMLCanvasElement, views: CupView[], op
       draw()
       if (moving) invalidate()
       else previousTime = 0
-      return
+      return moving
     }
     if (options.perform) {
       const still = reducedMotion.matches
@@ -297,7 +322,7 @@ export function createCupGallery(canvas: HTMLCanvasElement, views: CupView[], op
       // Une tasse qui joue ne s'arrête jamais, sauf si on a demandé moins de mouvement.
       if (still) previousTime = 0
       else invalidate()
-      return
+      return !still
     }
     for (const entry of entries) {
       const tx = reducedMotion.matches ? 0 : entry.tx
@@ -323,6 +348,7 @@ export function createCupGallery(canvas: HTMLCanvasElement, views: CupView[], op
     draw()
     if (moving) invalidate()
     else previousTime = 0
+    return moving
   }
 
   function invalidate() {
@@ -457,6 +483,11 @@ export function createCupGallery(canvas: HTMLCanvasElement, views: CupView[], op
       to.root.visible = false
       to.setInk(0)
       to.setAccessoryReveal(0)
+      invalidate()
+    },
+    // Change de niveau en cours de route (le juge de la barre latérale, ou un réglage).
+    setQuality(id: Exclude<QualityId, 'static'>) {
+      quality = QUALITY[id]
       invalidate()
     },
     setSteamColor(value: string) {
