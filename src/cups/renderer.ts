@@ -56,7 +56,7 @@ const STEAM_MARGIN = 0.1
 // Plafond de la hauteur de vapeur, en unités de tasse : au-delà elle ne ferait que s'étirer.
 const STEAM_MAX = 1.5
 // Plancher : la vapeur ne se réduit jamais en dessous, même sous un grand chapeau.
-const STEAM_MIN = 0.6
+const STEAM_MIN = 1
 
 // Passage d'une tasse à l'autre : le motif et l'accessoire s'effacent, la forme glisse, puis ils reviennent.
 const MORPH_OUT = 0.11
