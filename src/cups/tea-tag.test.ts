@@ -7,7 +7,7 @@ import { ACCESSORY_FRAME } from './renderer'
 import { fitTeaTag, TEA_TAG } from './tea-tag'
 
 describe('left-side tea tag', () => {
-  it('preserves the approved string geometry when enlarging only the paper', () => {
+  it('preserves the approved string geometry on lidless cups, and passes straight through lids', () => {
     const hashes = Object.fromEntries(vessels.map(vessel => {
       const cup = createCup(vessel, { accessory: 'tea-bag' })
       const string = cup.root.getObjectByName('tea-string') as Mesh
@@ -25,7 +25,7 @@ describe('left-side tea tag', () => {
         "cay-glass": "3920b8c6fe5c51ffd3cfbf287bdfe34f4621c3b8ecdd6cf46428fd170442186e",
         "colombian-mug": "61d70457df2eabbd7f247333cc434cbcefff40a33f938ccad3d41ffc285fff8c",
         "footed-bowl": "b616db4cecb9fe7dba8fe9539b54bf413def6aecb4e36b4cd63382cd6242006e",
-        "gaiwan": "1b6502c9e69d2f3452041ff80bc036fdd7dd52c73badbde39a982b9c55c62ddd",
+        "gaiwan": "8278e967371eee64e8583163ccfcfc8e77a9ef987d37c442dd5c485f0f9ec612",
         "goblet": "a8026d0b9ec32b6ef76255a24d751f3ffec35289a0782f7a5651c06ceacf3e8d",
         "kulhad": "2830298c34b75a8893acd35df7ea73a0b6f70a46cada68c1a289c5e3a9685adf",
         "mug": "82f6480fce462e85c25218337d003e14d8f0f0843b2f2f4299ea5c1c5dceef7b",
@@ -35,7 +35,7 @@ describe('left-side tea tag', () => {
         "round-mug": "a5f293f8e4df9bdbdaa88d53906e5f53f314bebba3b4510aaf9f443f37172eb7",
         "rounded-tumbler": "bc46ba89cc4e1a689afb2abcc989de0ddf3e4ee177b916d5a71fbcbb927a2d72",
         "small-cup": "d1e122ff077bddba27cab1e58f9935c1f93389cb1b8e8a4ce956341798c98c57",
-        "takeaway": "577e7a4236507fc6cca3488bff87cb840c80e1527c9781b92bb1912312edec41",
+        "takeaway": "c568b7adf5cf1cef4727ed2a95f42c2ff082cd0a3bedb7a3c9162513f6570e5c",
         "tall-mug": "a9870ef2ab95e3cbd7de12614b05dfd91c1ee0c02c52bf93856e902d78140610",
         "teacup": "44175ea5668a75fadd9b3d224a87f74b4d898ae2d95567d7acc66d7478af24ce",
         "tumbler": "ffc70fe24eed0056cbbb9422ef90ab2a95c6e6ebdeb798920a3b011a51d9155e",
@@ -164,22 +164,18 @@ describe('left-side tea tag', () => {
         cup.dispose()
       })
 
-      it('leaves all original geometry and colors unchanged, moving only the cover by a hairline', () => {
+      it('leaves all original geometry and colors unchanged, lid included', () => {
         const before = JSON.stringify(vessel)
         const bare = createCup(vessel)
         const tea = createCup(vessel, { accessory: 'tea-bag' })
-        const fit = fitTeaTag(vessel)
         for (const object of bare.root.children) {
           const found = tea.root.getObjectByName(object.name)!
           expect(found.rotation.toArray()).toEqual(object.rotation.toArray())
-          expect(found.position.y - object.position.y).toBeCloseTo(fit.lidParts.includes(object.name) ? fit.lidLift : 0, 8)
+          expect(found.position.toArray()).toEqual(object.position.toArray())
           if (object instanceof Mesh) {
             expect((found as Mesh).geometry.attributes.position!.array).toEqual(object.geometry.attributes.position!.array)
           }
         }
-        const top = Math.max(...vessel.parts.flatMap(part => part.outline.map(point => point[1])),
-          vessel.lid ? vessel.lid.baseY + vessel.lid.height + vessel.lid.rise : 0)
-        expect(fit.lidLift).toBeLessThan(top * 0.02)
         expect(JSON.stringify(vessel)).toBe(before)
         tea.setColors({ body: '#0000ff' })
         expect(((tea.root.getObjectByName('tea-tag') as Mesh).material as MeshBasicMaterial).color.getHexString()).toBe('e2b245')
@@ -216,34 +212,28 @@ describe('left-side tea tag', () => {
     })
   }
 
-  it.each(['takeaway', 'gaiwan'])('pinches the string below the %s lid without needing a full round-string gap', id => {
+  it.each(['takeaway', 'gaiwan'])('lets the string pass through the %s lid without lifting it', id => {
     const vessel = vessels.find(vessel => vessel.id === id)!
+    const bare = createCup(vessel)
     const cup = createCup(vessel, { accessory: 'tea-bag' })
+    bare.root.updateMatrixWorld(true)
     cup.root.updateMatrixWorld(true)
-    const cover = new Box3().setFromObject(cup.root.getObjectByName('lid')!)
-    const supports = ['rim', 'lid-seat', 'lid-edge'].flatMap(name => {
-      const object = cup.root.getObjectByName(name)
-      return object ? [new Box3().setFromObject(object).max.y] : []
-    })
-    const top = Math.max(...supports)
-    expect(cover.min.y - top).toBeCloseTo(0.008, 6)
-    expect(cover.min.y - top).toBeLessThan(TEA_TAG.cordRadius)
+    for (const name of ['lid', vessel.lid ? 'lid-top' : 'lid-knob']) {
+      expect(new Box3().setFromObject(cup.root.getObjectByName(name)!).min.y)
+        .toBeCloseTo(new Box3().setFromObject(bare.root.getObjectByName(name)!).min.y, 8)
+    }
+    // Le fil reste rond (aucun aplatissement) et traverse le couvercle.
     const string = cup.root.getObjectByName('tea-string') as Mesh<TubeGeometry>
     const path = string.geometry.parameters.path
     const points = string.geometry.attributes.position!
-    let pinched = 0
-    for (let ring = 0; ring <= 96; ring++) {
+    for (let ring = 0; ring <= 96; ring += 8) {
       const center = path.getPointAt(ring / 96)
-      if (center.y < top) continue
-      if (Math.hypot(center.x, center.z) > fitTeaTag(vessel).outerRadius + 0.015) continue
       for (let side = 0; side <= 8; side++) {
-        const y = points.getY(ring * 9 + side)
-        expect(y).toBeGreaterThan(top)
-        expect(y).toBeLessThan(cover.min.y)
+        expect(Math.hypot(points.getX(ring * 9 + side) - center.x, points.getY(ring * 9 + side) - center.y, points.getZ(ring * 9 + side) - center.z))
+          .toBeCloseTo(TEA_TAG.cordRadius, 5)
       }
-      pinched++
     }
-    expect(pinched).toBeGreaterThan(3)
+    bare.dispose()
     cup.dispose()
   })
 
@@ -258,7 +248,9 @@ describe('left-side tea tag', () => {
     const releaseRadius = Math.hypot(release[0], release[2])
     expect(releaseRadius).toBeCloseTo(retaining.max.x + 0.018, 6)
     expect(releaseRadius + TEA_TAG.cordRadius).toBeLessThan(cover.max.x - 0.03)
-    expect(release[1]).toBeLessThan(cover.min.y)
+    // Le fil traverse le couvercle, puis ressort sous son jupon pour tomber.
+    expect(release[1]).toBeGreaterThan(cover.min.y)
+    expect(fitTeaTag(vessel).points[3]![1]).toBeLessThan(cover.min.y)
     let falling = 0
     for (let i = 0; i <= 192; i++) {
       const point = string.geometry.parameters.path.getPointAt(i / 192)

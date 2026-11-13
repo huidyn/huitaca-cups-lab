@@ -5,7 +5,7 @@ import {
 import type { Point2, Point3, VesselDefinition } from './types'
 
 export const TEA_TAG_COLORS = { string: '#e3dbd1', paper: '#e2b245' } as const
-export const TEA_TAG = { cordRadius: 0.016, width: 0.26, height: 0.3, depth: 0.025, pinchHeight: 0.006 }
+export const TEA_TAG = { cordRadius: 0.016, width: 0.26, height: 0.3, depth: 0.025 }
 
 export interface TeaTagFit {
   points: Point3[]
@@ -14,7 +14,6 @@ export interface TeaTagFit {
   releaseRadius: number
   azimuth: number
   tilt: number
-  lidLift: number
   lidParts: string[]
 }
 const fits = new WeakMap<VesselDefinition, TeaTagFit>()
@@ -31,9 +30,6 @@ export function fitTeaTag(vessel: VesselDefinition): TeaTagFit {
   const supportRadius = Math.max(...support.map(point => point[0]))
   const outerRadius = Math.max(supportRadius, ...(cover?.outline.map(point => point[0]) ?? []))
   const lidParts = cover ? ['lid', vessel.lid ? 'lid-top' : 'lid-knob'] : []
-  // Le fil s'aplatit seulement dans la pince : le couvercle ne monte que de
-  // l'épaisseur comprimée, plus le recouvrement déjà présent entre les pièces.
-  const lidLift = cover ? Math.max(0, top - Math.min(...cover.outline.map(point => point[1]))) + TEA_TAG.pinchHeight + 0.002 : 0
   const body = vessel.parts.find(part => part.id === vessel.face.surface)!
   const floor = Math.min(...body.outline.map(point => point[1]))
   const tagTop = top - Math.min(0.54, (top - floor) * 0.36)
@@ -58,7 +54,9 @@ export function fitTeaTag(vessel: VesselDefinition): TeaTagFit {
   const azimuth = -Math.asin(0.9)
   const direction = new Vector3(Math.sin(azimuth), 0, Math.cos(azimuth))
   const at = (r: number, y: number): Point3 => [direction.x * r, y, direction.z * r]
-  const crest = top + (cover ? (TEA_TAG.pinchHeight + 0.002) / 2 : TEA_TAG.cordRadius + 0.002)
+  // Sous un couvercle, le fil n'est qu'un fil : il passe dans le couvercle, qui
+  // reste posé à sa place, et n'apparaît qu'au bord, là où il sort pour tomber.
+  const crest = cover ? top : top + TEA_TAG.cordRadius + 0.002
   // Un couvercle plastique enveloppe le bord : le fil tombe depuis le siège
   // de la tasse, sous le surplomb, pas depuis le diamètre maximal du plastique.
   const releaseRadius = vessel.lid ? supportRadius + TEA_TAG.cordRadius + 0.002
@@ -108,7 +106,7 @@ export function fitTeaTag(vessel: VesselDefinition): TeaTagFit {
     ...rope.map(([r, y]) => at(r, y)),
     at(tagRadius + 0.015 * Math.sin(tilt), tagTop - 0.015 * Math.cos(tilt))
   ]
-  const fit = { points, tag, outerRadius, releaseRadius, azimuth, tilt, lidLift, lidParts }
+  const fit = { points, tag, outerRadius, releaseRadius, azimuth, tilt, lidParts }
   fits.set(vessel, fit)
   return fit
 }
@@ -123,20 +121,6 @@ export function createTeaTag(fit: TeaTagFit) {
   const path = new CurvePath<Vector3>()
   for (let i = 1; i < points.length; i++) path.add(new LineCurve3(points[i - 1]!, points[i]!))
   const geometry = new TubeGeometry(path, 96, TEA_TAG.cordRadius, 8, false)
-  if (fit.lidLift) {
-    const positions = geometry.attributes.position!
-    for (let ring = 0; ring <= 96; ring++) {
-      const center = path.getPointAt(ring / 96)
-      const t = Math.max(0, Math.min(1, (Math.hypot(center.x, center.z) - fit.outerRadius - 0.02) / 0.06))
-      const squash = TEA_TAG.pinchHeight / (2 * TEA_TAG.cordRadius) * (1 - t) + t
-      for (let side = 0; side <= 8; side++) {
-        const i = ring * 9 + side
-        positions.setY(i, center.y + (positions.getY(i) - center.y) * squash)
-      }
-    }
-    positions.needsUpdate = true
-    geometry.computeVertexNormals()
-  }
   const string = new Mesh(geometry, materials.string)
   string.name = 'tea-string'
   const w = TEA_TAG.width / 2

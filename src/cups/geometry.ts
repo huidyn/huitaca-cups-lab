@@ -184,7 +184,6 @@ export function createCup(definition: VesselDefinition, options: { pattern?: boo
     const tea = createTeaTag(fit)
     extraMaterials.push(...tea.materials)
     root.add(tea.group)
-    for (const part of root.children.filter(child => fit.lidParts.includes(child.name))) part.position.y += fit.lidLift
   }
   if (options.accessory === 'beret') {
     const beret = createBeret(fitBeret(definition))
