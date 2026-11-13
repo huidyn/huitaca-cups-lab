@@ -125,15 +125,32 @@ export const EYE_ROWS = 32
 export const EYE_POINTS = (EYE_COLUMNS + 1) * (EYE_ROWS + 1)
 // Un œil fermé reste un trait, jamais rien.
 const BLINK_THICKNESS = 0.034
+// Hauteur où les deux paupières se rejoignent, depuis le bas de l'œil ouvert.
+const LID_MEET = 0.3
 
 // Les sommets de l'œil dans le plan du visage, autour de son centre. `side` : -1 à gauche, 1 à droite.
 export function eyeShape(pose: EyePose, side: number, width: number, height: number, out = new Float32Array(EYE_POINTS * 2)) {
   const halfW = pose.w * width / 2
-  const halfH = Math.max(BLINK_THICKNESS / 2, pose.h * height * pose.open / 2)
+  const halfH = Math.max(BLINK_THICKNESS / 2, pose.h * height / 2)
   const radius = Math.min(halfW, halfH)
-  const cut = pose.lid > 0 || pose.slant !== 0
-  const top = halfH - pose.lid * 2 * halfH
-  const bottom = -halfH + pose.cheek * 2 * halfH
+  // Le clignement est une vraie paupière : l'œil garde sa taille, la paupière du haut descend,
+  // celle du bas monte un peu, et elles se rejoignent sous le milieu. Même boucle, même coût.
+  const closed = 1 - Math.max(0, Math.min(1, pose.open))
+  const meet = pose.cheek + (1 - pose.lid - pose.cheek) * LID_MEET
+  let upper = 1 - pose.lid - (1 - pose.lid - meet) * closed
+  let lower = pose.cheek + (meet - pose.cheek) * closed
+  // Un œil fermé reste un trait : les paupières ne se touchent jamais tout à fait.
+  const least = Math.min(1, BLINK_THICKNESS / (2 * halfH))
+  if (upper - lower < least) {
+    const middle = Math.max(least / 2, Math.min(1 - least / 2, (upper + lower) / 2))
+    upper = middle + least / 2
+    lower = middle - least / 2
+  }
+  const slant = pose.slant * (1 - closed)
+  const cut = pose.lid > 0 || slant !== 0 || closed > 0
+  const lifted = pose.cheek > 0 || closed > 0
+  const top = -halfH + upper * 2 * halfH
+  const bottom = -halfH + lower * 2 * halfH
   const angle = pose.tilt * side * Math.PI / 180
   const cos = Math.cos(angle)
   const sin = Math.sin(angle)
@@ -146,8 +163,8 @@ export function eyeShape(pose: EyePose, side: number, width: number, height: num
       const x = (col / EYE_COLUMNS * 2 - 1) * rowHalf
       let y = y0
       // La paupière est une droite : ce qui dépasse se rabat dessus.
-      if (cut) y = Math.min(y, Math.max(top + pose.slant * x * side, -halfH * 0.6))
-      if (pose.cheek > 0) y = Math.max(y, bottom)
+      if (cut) y = Math.min(y, Math.max(top + slant * x * side, closed > 0 ? bottom : -halfH * 0.6))
+      if (lifted) y = Math.max(y, bottom)
       const ratio = x / halfW
       y += pose.bend * width * (0.5 - ratio * ratio)
       out[i++] = x * cos - y * sin
