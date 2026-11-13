@@ -64,7 +64,7 @@ describe('thinking steam', () => {
     const topY = Math.max(...vessel.parts.flatMap(part => part.outline.map(point => point[1])),
       vessel.lid ? vessel.lid.baseY + vessel.lid.height + vessel.lid.rise : 0)
     // Mêmes valeurs que le rendu : départ 0,07 au-dessus de la tasse, marge 0,1 sous le haut du cadre.
-    const height = Math.min(1, lift + halfHeight - 0.1 - 0.07 - topY)
+    const height = Math.min(1.5, lift + halfHeight - 0.1 - 0.07 - topY)
     expect(height).toBeGreaterThan(0.6)
     const offset = vessel.handle ? -0.18 : 0
     for (const size of [24, 32, 48, 96, 600]) {

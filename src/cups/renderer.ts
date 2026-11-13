@@ -1,4 +1,4 @@
-import { OrthographicCamera, Scene, SRGBColorSpace, WebGLRenderer } from 'three'
+import { Box3, OrthographicCamera, Scene, SRGBColorSpace, WebGLRenderer } from 'three'
 import { createCup } from './geometry'
 import type { CupDesign } from './designs'
 import { bandLayout, designSvg, MASK_INKS, maskWidth, rasterizeSvg } from './pattern'
@@ -53,6 +53,8 @@ const RESTING = facePose()
 // elle ne sort jamais de la boîte, même quand la tasse respire.
 const STEAM_BASE = 0.07
 const STEAM_MARGIN = 0.1
+// Plafond de la hauteur de vapeur, en unités de tasse : au-delà elle ne ferait que s'étirer.
+const STEAM_MAX = 1.5
 
 // Passage d'une tasse à l'autre : le motif et l'accessoire s'effacent, la forme glisse, puis ils reviennent.
 const MORPH_OUT = 0.11
@@ -118,9 +120,12 @@ export function createCupGallery(canvas: HTMLCanvasElement, views: CupView[], op
     scene.add(pivot)
     const camera = new OrthographicCamera(-1.6, 1.6, framing.halfHeight, -framing.halfHeight, 0.1, 50)
     // La vapeur reste face à la caméra : elle ne tourne pas avec la tasse.
-    const steam = options.perform ? createSteam(Math.min(1, framing.lift + framing.halfHeight - STEAM_MARGIN - STEAM_BASE - cup.topY), options.steamColor) : undefined
+    // La vapeur part du plus haut de ce qui est sur la tasse (béret, plumes, tige) et monte
+    // jusqu'à la marge du cadre : toute la hauteur libre, plafonnée.
+    const top = Math.max(cup.topY - framing.lift, new Box3().setFromObject(pivot).max.y)
+    const steam = options.perform ? createSteam(Math.min(STEAM_MAX, framing.halfHeight - STEAM_MARGIN - STEAM_BASE - top), options.steamColor) : undefined
     if (steam) {
-      steam.group.position.set(pivot.position.x, cup.topY - framing.lift + STEAM_BASE, 0)
+      steam.group.position.set(pivot.position.x, top + STEAM_BASE, 0)
       scene.add(steam.group)
     }
     return { element, vessel, design, accessory, morph: undefined as Morphing | undefined, maskWidth: 0, cup, scene, camera, steam, steamY: steam?.group.position.y ?? 0, x: 0, y: 0, bx: 0, by: 0, tx: 0, ty: 0 }
