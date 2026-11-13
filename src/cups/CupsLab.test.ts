@@ -924,7 +924,7 @@ describe('cup lab cultural section', () => {
       expect(root.querySelector('#study-title')?.textContent).toBe('Agents, not chats.')
       expect(root.querySelector('.cup-stage')).toBeNull()
       expect(root.querySelector('.study-controls')).toBeNull()
-      await vi.waitFor(() => expect(root.querySelectorAll('.side-agent')).toHaveLength(10))
+      await vi.waitFor(() => expect(root.querySelectorAll('.side-agent')).toHaveLength(40))
       // Le sidebar a son propre canevas, un seul pour toute la liste.
       await vi.waitFor(() => expect(vi.mocked(createCupGallery).mock.calls.length).toBe(calls + 1))
       expect(root.querySelectorAll('canvas')).toHaveLength(1)

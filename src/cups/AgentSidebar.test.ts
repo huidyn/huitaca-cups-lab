@@ -9,7 +9,7 @@ import { createCupGallery } from './renderer'
 import { runScenario, SCENARIOS } from './bench'
 
 const gallery = vi.hoisted(() => ({
-  refresh: vi.fn(), setQuality: vi.fn(), dispose: vi.fn(), wake: vi.fn(), rest: vi.fn(),
+  refresh: vi.fn(), setQuality: vi.fn(), dispose: vi.fn(), wake: vi.fn(), rest: vi.fn(), sleep: vi.fn(), setActing: vi.fn(), setSteamColor: vi.fn(),
   // Une image par tasse, dont l'adresse dit la taille demandée.
   snapshot: vi.fn(async (indices: number[], size: number) => indices.map(i => `data:image/png;base64,${size}-${i}`))
 }))
@@ -34,6 +34,8 @@ describe('agents sidebar study', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    // Le niveau retenu d'une visite à l'autre ne doit pas fuir d'un test à l'autre.
+    localStorage.clear()
     media = Object.assign(new EventTarget(), { matches: false })
     vi.stubGlobal('matchMedia', () => media)
     root = document.createElement('div')
@@ -44,7 +46,7 @@ describe('agents sidebar study', () => {
     media.matches = reduced
     app = createApp(AgentSidebar)
     app.mount(root)
-    await vi.waitFor(() => expect(root.querySelectorAll('.side-agent')).toHaveLength(10))
+    await vi.waitFor(() => expect(root.querySelectorAll('.side-agent')).toHaveLength(40))
     if (!reduced) await vi.waitFor(() => expect(createCupGallery).toHaveBeenCalled())
   }
   const button = (label: string) => [...root.querySelectorAll<HTMLButtonElement>('button')].find(item => item.textContent?.trim() === label)!
@@ -65,7 +67,7 @@ describe('agents sidebar study', () => {
     // La liste, les noms et le bouton d'agent sont lisibles ; les gris sont décoratifs.
     expect(root.querySelectorAll('.sk').length).toBeGreaterThan(8)
     expect(root.querySelector('.side-org')?.getAttribute('aria-hidden')).toBe('true')
-    expect(root.querySelectorAll('.side-agent .agent-cup[aria-hidden="true"]')).toHaveLength(10)
+    expect(root.querySelectorAll('.side-agent .agent-cup[aria-hidden="true"]')).toHaveLength(40)
     expect(root.querySelector('.side-agent.is-current .agent-name')?.textContent).toBe('Research')
     expect(root.querySelector('.side')?.getAttribute('style')).toContain('--cup: 32px')
   })
@@ -74,7 +76,7 @@ describe('agents sidebar study', () => {
     await mount()
     expect(root.querySelectorAll('canvas')).toHaveLength(1)
     expect(createCupGallery).toHaveBeenCalledTimes(1)
-    expect(views()).toHaveLength(10)
+    expect(views()).toHaveLength(40)
     expect(views().every((view, i) => view.element === root.querySelectorAll('.agent-viewport')[i])).toBe(true)
     expect(views().map(view => view.vessel.id).slice(0, 4)).toEqual(['teacup', 'goblet', 'takeaway', 'rimmed-cup'])
     expect(views().map(view => view.accessory).slice(0, 4)).toEqual(['paintbrush', 'beret', undefined, 'tea-bag'])
@@ -88,11 +90,12 @@ describe('agents sidebar study', () => {
 
   it('shows still images made by the 3D renderer, at the chosen size, each made once', async () => {
     await mount()
-    await vi.waitFor(() => expect(root.querySelectorAll('.agent-still')).toHaveLength(10))
+    await vi.waitFor(() => expect(root.querySelectorAll('.agent-still')).toHaveLength(40))
     expect(root.querySelectorAll('.flat-cup')).toHaveLength(0)
     expect(root.querySelector('.agent-still')?.getAttribute('src')).toMatch(/32-\d+$/)
     button('28 px').click()
-    await vi.waitFor(() => expect(root.querySelector('.agent-still')?.getAttribute('src')).toMatch(/28-\d+$/))
+    // Toutes les images, prises par lots de 8 : on attend la dernière.
+    await vi.waitFor(() => expect([...root.querySelectorAll('.agent-still')].every(img => /28-\d+$/.test(img.getAttribute('src')!))).toBe(true))
     const asked = gallery.snapshot.mock.calls.length
     button('32 px').click()
     await vi.waitFor(() => expect(root.querySelector('.agent-still')?.getAttribute('src')).toMatch(/32-\d+$/))
@@ -101,7 +104,7 @@ describe('agents sidebar study', () => {
 
   it('brings only the hovered row to life, then hands it back to its image', async () => {
     await mount()
-    await vi.waitFor(() => expect(root.querySelectorAll('.agent-still')).toHaveLength(10))
+    await vi.waitFor(() => expect(root.querySelectorAll('.agent-still')).toHaveLength(40))
     const agents = [...root.querySelectorAll<HTMLButtonElement>('.side-agent')]
     const hover = (i: number, type = 'mouse') => agents[i]!.dispatchEvent(Object.assign(new Event('pointerenter'), { pointerType: type }))
     hover(2)
@@ -138,24 +141,26 @@ describe('agents sidebar study', () => {
     expect(gallery.refresh).toHaveBeenCalled()
     gallery.refresh.mockClear()
     root.querySelector('.side-list')!.dispatchEvent(new Event('scroll'))
-    expect(gallery.refresh).toHaveBeenCalledTimes(1)
+    // Dès le premier mouvement, tout redevient image d'un coup, sans attendre un redessin.
+    expect(gallery.sleep).toHaveBeenCalledTimes(1)
+    root.querySelector('.side-list')!.dispatchEvent(new Event('scroll'))
+    expect(gallery.sleep).toHaveBeenCalledTimes(1)
     // Ni la taille ni le repli ne reconstruisent la scène.
     expect(createCupGallery).toHaveBeenCalledTimes(1)
   })
 
   it('gives agents past the examples a stable look derived from their id', async () => {
     await mount()
-    button('40').click()
-    await vi.waitFor(() => expect(createCupGallery).toHaveBeenCalledTimes(2))
-    expect(gallery.dispose).toHaveBeenCalledTimes(1)
     expect(views()).toHaveLength(40)
     expect(root.querySelectorAll('.agent-viewport')).toHaveLength(40)
     expect(root.querySelectorAll('.agent-name')[39]!.textContent).toBe('Agent 40')
     const again = views().slice(10).map(view => `${view.vessel.id}|${view.accessory}`)
     button('10').click()
-    await vi.waitFor(() => expect(createCupGallery).toHaveBeenCalledTimes(3))
+    await vi.waitFor(() => expect(createCupGallery).toHaveBeenCalledTimes(2))
+    expect(gallery.dispose).toHaveBeenCalledTimes(1)
+    expect(views()).toHaveLength(10)
     button('40').click()
-    await vi.waitFor(() => expect(createCupGallery).toHaveBeenCalledTimes(4))
+    await vi.waitFor(() => expect(createCupGallery).toHaveBeenCalledTimes(3))
     expect(views().slice(10).map(view => `${view.vessel.id}|${view.accessory}`)).toEqual(again)
   })
 
@@ -174,7 +179,7 @@ describe('agents sidebar study', () => {
 
   it('keeps the cups as still images with reduced motion, even on hover', async () => {
     await mount(true)
-    await vi.waitFor(() => expect(root.querySelectorAll('.agent-still')).toHaveLength(10))
+    await vi.waitFor(() => expect(root.querySelectorAll('.agent-still')).toHaveLength(40))
     expect(root.textContent).toContain('Reduced motion is on')
     root.querySelector('.side-agent')!.dispatchEvent(Object.assign(new Event('pointerenter'), { pointerType: 'mouse' }))
     expect(gallery.wake).not.toHaveBeenCalled()
@@ -193,7 +198,7 @@ describe('agents sidebar study', () => {
     await nextTick()
     expect(gallery.setQuality).toHaveBeenLastCalledWith('low')
     feed()
-    await vi.waitFor(() => expect(root.querySelectorAll('.flat-cup')).toHaveLength(10))
+    await vi.waitFor(() => expect(root.querySelectorAll('.flat-cup')).toHaveLength(40))
     expect(root.querySelector('[role="status"]')?.textContent).toContain('static cup')
     expect(gallery.dispose).toHaveBeenCalled()
     expect(root.querySelectorAll('.agent-viewport, .agent-still')).toHaveLength(0)
@@ -225,7 +230,7 @@ describe('agents sidebar study', () => {
     await nextTick()
     button('Measure').click()
     await vi.waitFor(() => expect(root.querySelectorAll('.agents-results tbody tr')).toHaveLength(SCENARIOS.length))
-    expect(vi.mocked(runScenario).mock.calls.map(call => call[0].id)).toEqual(['hero', 'sidebar'])
+    expect(vi.mocked(runScenario).mock.calls.map(call => call[0].id)).toEqual(['hero', 'sidebar', 'thinking'])
     expect(vi.mocked(runScenario).mock.calls.every(call => call[1].quality === 'balanced' && call[1].slowdown === 4)).toBe(true)
     const rows = [...root.querySelectorAll('.agents-results tbody tr')]
     expect(rows[0]!.textContent).toContain('One large cup')
