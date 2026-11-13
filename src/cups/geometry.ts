@@ -6,6 +6,7 @@ import {
 import type { Point2, VesselDefinition } from './types'
 import { createLidGeometry } from './lid'
 import { type AccessoryId, createPaintbrush, fitBrush, GAIWAN_LID_PARTS } from './accessories'
+import { createSprout, fitSprout } from './sprout'
 import { createBeret, fitBeret } from './beret'
 import { addEdgeTones } from './edge-tones'
 import { createTeaTag, fitTeaTag } from './tea-tag'
@@ -93,6 +94,16 @@ export function createHandleGeometry(handle: NonNullable<VesselDefinition['handl
   position.needsUpdate = true
   geometry.computeVertexNormals()
   return geometry
+}
+
+// Rotation autour du bord d'appui du couvercle, pas autour de l'origine de la tasse.
+function tiltLid(root: Group, lid: { pivot: [number, number]; angle: number; lift: number }) {
+  const angle = lid.angle * Math.PI / 180
+  const [px, py] = lid.pivot
+  for (const mesh of root.children.filter(child => GAIWAN_LID_PARTS.includes(child.name))) {
+    mesh.rotation.z = angle
+    mesh.position.set(px - (px * Math.cos(angle) - py * Math.sin(angle)), py + lid.lift - (px * Math.sin(angle) + py * Math.cos(angle)), 0)
+  }
 }
 
 export function createCup(definition: VesselDefinition, options: { pattern?: boolean; accessory?: AccessoryId } = {}) {
@@ -185,15 +196,15 @@ export function createCup(definition: VesselDefinition, options: { pattern?: boo
     const brush = createPaintbrush(fit)
     extraMaterials.push(...brush.materials)
     root.add(brush.group)
-    if (fit.lid) {
-      // Rotation autour du bord d'appui du couvercle, pas autour de l'origine de la tasse.
-      const angle = fit.lid.angle * Math.PI / 180
-      const [px, py] = fit.lid.pivot
-      for (const mesh of root.children.filter(child => GAIWAN_LID_PARTS.includes(child.name))) {
-        mesh.rotation.z = angle
-        mesh.position.set(px - (px * Math.cos(angle) - py * Math.sin(angle)), py + fit.lid.lift - (px * Math.sin(angle) + py * Math.cos(angle)), 0)
-      }
-    }
+    if (fit.lid) tiltLid(root, fit.lid)
+  }
+  if (options.accessory === 'leaf') {
+    const fit = fitSprout(definition)
+    const sprout = createSprout(fit)
+    extraMaterials.push(...sprout.materials)
+    root.add(sprout.group)
+    // La pousse soulève le couvercle du gaiwan, comme le pinceau.
+    if (fit.lid) tiltLid(root, fit.lid)
   }
 
   const face = definition.face

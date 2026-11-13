@@ -467,7 +467,7 @@ describe('cup lab cultural section', () => {
       expect(root.querySelector<HTMLInputElement>('input[name="cup-accessory"]:checked')!.value).toBe(input.value)
       expect(input.closest('label')!.classList.contains('is-selected')).toBe(true)
       await vi.waitFor(() => expect(root.querySelector('.cup-stage')?.getAttribute('data-ready')).toBe('true'))
-      expect(vi.mocked(createCupGallery).mock.calls.at(-1)![1][0]!.accessory).toBe(['paintbrush', 'beret', 'tea-bag', 'headphones', 'scarf'].includes(input.value) ? input.value : undefined)
+      expect(vi.mocked(createCupGallery).mock.calls.at(-1)![1][0]!.accessory).toBe(input.value)
     }
     // Pinceau → feuille → béret → étiquette → casque → écharpe.
     expect(createCupGallery).toHaveBeenCalledTimes(calls + 5)
@@ -482,6 +482,8 @@ describe('cup lab cultural section', () => {
   })
 
   it.each([
+    { reduced: false, accessory: 'leaf', name: 'leaf', note: 'two-leaf sprout' },
+    { reduced: true, accessory: 'leaf', name: 'leaf', note: 'two-leaf sprout' },
     { reduced: false, accessory: 'beret', name: 'beret', note: 'soft red beret' },
     { reduced: true, accessory: 'beret', name: 'beret', note: 'soft red beret' },
     { reduced: false, accessory: 'tea-bag', name: 'tea tag', note: 'yellow tea tag' },
