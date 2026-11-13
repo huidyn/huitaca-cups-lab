@@ -41,6 +41,12 @@ export interface GalleryOptions {
   quality?: Exclude<QualityId, 'static'>
   // Appelée après chaque image dessinée, avec ce qu'elle a coûté au processeur.
   onFrame?: (sample: Sample) => void
+  // Mode repos (barre latérale) : chaque tasse regarde par là et n'est PAS dessinée ; la page montre
+  // son image (`snapshot`). Seule une tasse réveillée (`wake`) suit le curseur et coûte des images ;
+  // rendormie (`rest`), elle revient à ce regard puis disparaît du canevas.
+  resting?: { x: number; y: number }
+  // Appelée quand l'ensemble des tasses dessinées change : la page cache leur image, montre les autres.
+  onShown?: (indices: number[]) => void
 }
 
 // La tasse suit le curseur moins que ses yeux, et plus lentement : c'est le regard qui mène.
@@ -139,8 +145,19 @@ export function createCupGallery(canvas: HTMLCanvasElement, views: CupView[], op
       steam.group.position.set(pivot.position.x, start, 0)
       scene.add(steam.group)
     }
-    return { element, vessel, design, accessory, morph: undefined as Morphing | undefined, maskWidth: 0, cup, scene, camera, steam, steamY: steam?.group.position.y ?? 0, x: 0, y: 0, bx: 0, by: 0, tx: 0, ty: 0 }
+    return { element, vessel, design, accessory, morph: undefined as Morphing | undefined, maskWidth: 0, maskReady: Promise.resolve(), awake: false, settled: true, cup, scene, camera, steam, steamY: steam?.group.position.y ?? 0, x: 0, y: 0, bx: 0, by: 0, tx: 0, ty: 0 }
   })
+  const resting = options.resting
+  let shown: number[] = []
+  // Dernière position connue du curseur : une tasse réveillée vise là tout de suite.
+  let last: { x: number; y: number } | undefined
+  if (resting) {
+    for (const entry of entries) {
+      entry.x = entry.bx = entry.tx = resting.x
+      entry.y = entry.by = entry.ty = resting.y
+      pose(entry, 0)
+    }
+  }
   const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)')
   let frame = 0
   let previousTime = 0
@@ -214,49 +231,80 @@ export function createCupGallery(canvas: HTMLCanvasElement, views: CupView[], op
 
   function updateMask(entry: typeof entries[number], pixelsPerUnit: number) {
     const design = entry.design
-    if (!design || !entry.vessel.pattern) return
+    if (!design || !entry.vessel.pattern) return Promise.resolve()
     // Le masque suit la taille de la tasse à l'écran : un redessin par palier, jamais par image.
     const width = maskDimensions(entry.vessel, pixelsPerUnit, textureLimit).width
-    if (width === entry.maskWidth) return
+    if (width === entry.maskWidth) return entry.maskReady
     entry.maskWidth = width
-    renderDesignMask(entry.vessel, design, pixelsPerUnit, textureLimit).then(mask => {
+    entry.maskReady = renderDesignMask(entry.vessel, design, pixelsPerUnit, textureLimit).then(mask => {
       if (disposed || entry.design !== design || entry.maskWidth !== width) return
       entry.cup.setMask(mask, anisotropy)
       invalidate()
     }).catch(() => {})
+    return entry.maskReady
   }
-  function draw() {
+
+  // Attitude de la tasse d'après son regard courant (yeux) et son corps (plus lent).
+  function pose(entry: typeof entries[number], sway: number) {
+    entry.cup.root.rotation.y = entry.bx * BODY_YAW + sway
+    entry.cup.root.rotation.x = bodyPitch(entry.by)
+    entry.cup.look(entry.x, entry.y)
+  }
+
+  // Une tasse au repos, arrivée à son regard de repos, n'est pas dessinée : la page montre son image.
+  const hidden = (entry: typeof entries[number]) => Boolean(resting) && !entry.awake && entry.settled
+
+  function fit() {
     const bounds = canvas.getBoundingClientRect()
-    if (!bounds.width || !bounds.height) return
     const density = Math.min(window.devicePixelRatio || 1, quality.density)
+    if (!bounds.width || !bounds.height) return { bounds, density, ok: false }
     if (renderer.getPixelRatio() !== density ||
         canvas.width !== Math.round(bounds.width * density) ||
         canvas.height !== Math.round(bounds.height * density)) {
       renderer.setPixelRatio(density)
       renderer.setSize(bounds.width, bounds.height, false)
     }
+    return { bounds, density, ok: true }
+  }
+
+  function aimCamera(entry: typeof entries[number], aspect: number) {
+    const { camera } = entry
+    camera.left = -framing.halfHeight * aspect
+    camera.right = -camera.left
+    camera.updateProjectionMatrix()
+    const angle = elevation * Math.PI / 180
+    camera.position.set(0, Math.sin(angle) * 12, Math.cos(angle) * 12)
+    camera.lookAt(0, 0, 0)
+  }
+
+  function draw() {
+    const visible = resting ? entries.flatMap((entry, i) => hidden(entry) ? [] : [i]) : undefined
+    // Rien à dessiner, et le canevas est déjà vide : pas d'image du tout.
+    if (visible && !visible.length && !shown.length) return
+    const { bounds, density, ok } = fit()
+    if (!ok) return
     renderer.setScissorTest(false)
     renderer.clear()
     renderer.setScissorTest(true)
     for (const entry of entries) {
+      if (hidden(entry)) continue
       const box = entry.element.getBoundingClientRect()
       if (!box.width || !box.height) continue
       // Hors du canevas (liste qui défile) : rien à dessiner, et pas de masque à calculer.
       if (box.bottom < bounds.top || box.top > bounds.bottom || box.right < bounds.left || box.left > bounds.right) continue
-      const { camera } = entry
-      camera.left = -framing.halfHeight * box.width / box.height
-      camera.right = -camera.left
-      camera.updateProjectionMatrix()
-      const angle = elevation * Math.PI / 180
-      camera.position.set(0, Math.sin(angle) * 12, Math.cos(angle) * 12)
-      camera.lookAt(0, 0, 0)
+      aimCamera(entry, box.width / box.height)
       renderer.setViewport(box.left - bounds.left, bounds.bottom - box.bottom, box.width, box.height)
       renderer.setScissor(box.left - bounds.left, bounds.bottom - box.bottom, box.width, box.height)
-      updateMask(entry, box.height * density / (2 * framing.halfHeight))
-      renderer.render(entry.scene, camera)
+      void updateMask(entry, box.height * density / (2 * framing.halfHeight))
+      renderer.render(entry.scene, entry.camera)
     }
     frames++
     canvas.dataset.frames = String(frames)
+    // Même tâche que le dessin : l'image disparaît et la tasse paraît au même affichage.
+    if (visible && visible.join() !== shown.join()) {
+      shown = visible
+      options.onShown?.(visible)
+    }
   }
 
   let drawnAt = 0
@@ -325,23 +373,23 @@ export function createCupGallery(canvas: HTMLCanvasElement, views: CupView[], op
       return !still
     }
     for (const entry of entries) {
-      const tx = reducedMotion.matches ? 0 : entry.tx
-      const ty = reducedMotion.matches ? 0 : entry.ty
+      if (hidden(entry)) continue
+      const tx = reducedMotion.matches ? resting?.x ?? 0 : entry.tx
+      const ty = reducedMotion.matches ? resting?.y ?? 0 : entry.ty
       const quick = reducedMotion.matches ? 1 : 1 - Math.exp(-dt * EYE_RATE)
       const slow = reducedMotion.matches ? 1 : 1 - Math.exp(-dt * BODY_RATE)
       entry.x += (tx - entry.x) * quick
       entry.y += (ty - entry.y) * quick
       entry.bx += (tx - entry.bx) * slow
       entry.by += (ty - entry.by) * slow
-      if (Math.abs(tx - entry.bx) + Math.abs(ty - entry.by) < 0.001) {
+      entry.settled = Math.abs(tx - entry.bx) + Math.abs(ty - entry.by) < 0.001
+      if (entry.settled) {
         entry.x = entry.bx = tx
         entry.y = entry.by = ty
       } else {
         moving = true
       }
-      entry.cup.root.rotation.y = entry.bx * BODY_YAW + (animate ? Math.sin(turnTime * 0.5) * 0.22 : 0)
-      entry.cup.root.rotation.x = bodyPitch(entry.by)
-      entry.cup.look(entry.x, entry.y)
+      pose(entry, animate ? Math.sin(turnTime * 0.5) * 0.22 : 0)
       if (advance(entry, reducedMotion.matches ? Infinity : dt)) moving = true
       follow(entry, cup => cup.pose({ ...RESTING, gaze: [entry.x, entry.y] }))
     }
@@ -393,19 +441,33 @@ export function createCupGallery(canvas: HTMLCanvasElement, views: CupView[], op
     if (turntable || reducedMotion.matches || event.pointerType === 'touch') return
     let changed = false
     pointerAt = event.timeStamp
+    last = { x: event.clientX, y: event.clientY }
     for (const entry of entries) {
-      const box = entry.element.getBoundingClientRect()
-      const tx = Math.max(-1, Math.min(1, (event.clientX - box.left - box.width / 2) / 420))
-      const ty = Math.max(-1, Math.min(1, (box.top + box.height / 2 - event.clientY) / 300))
-      changed ||= tx !== entry.tx || ty !== entry.ty
-      entry.tx = tx
-      entry.ty = ty
+      // Au repos, une tasse endormie ne lit même pas sa boîte : le curseur ne lui coûte rien.
+      if (resting && !entry.awake) continue
+      changed = aim(entry) || changed
     }
     if (changed) invalidate()
   }
 
+  function aim(entry: typeof entries[number]) {
+    if (!last) return false
+    const box = entry.element.getBoundingClientRect()
+    const tx = Math.max(-1, Math.min(1, (last.x - box.left - box.width / 2) / 420))
+    const ty = Math.max(-1, Math.min(1, (box.top + box.height / 2 - last.y) / 300))
+    const changed = tx !== entry.tx || ty !== entry.ty
+    entry.tx = tx
+    entry.ty = ty
+    return changed
+  }
+
   function reset() {
-    for (const entry of entries) entry.tx = entry.ty = 0
+    for (const entry of entries) {
+      entry.tx = resting?.x ?? 0
+      entry.ty = resting?.y ?? 0
+      entry.awake = false
+    }
+    last = undefined
     pointerAt = -Infinity
     invalidate()
   }
@@ -496,6 +558,69 @@ export function createCupGallery(canvas: HTMLCanvasElement, views: CupView[], op
     },
     // À appeler quand ce que joue la tasse change alors que rien ne bouge (mouvement réduit).
     refresh: invalidate,
+    // Mode repos : la tasse se met à suivre le curseur (survol de sa rangée).
+    wake(index: number) {
+      const entry = entries[index]
+      if (!resting || !entry || entry.awake || reducedMotion.matches) return
+      entry.awake = true
+      entry.settled = false
+      aim(entry)
+      invalidate()
+    },
+    // Mode repos : retour au regard de repos ; une fois arrivée, elle quitte le canevas.
+    rest(index: number) {
+      const entry = entries[index]
+      if (!resting || !entry || !entry.awake) return
+      entry.awake = false
+      entry.settled = false
+      entry.tx = resting.x
+      entry.ty = resting.y
+      invalidate()
+    },
+    // Images de repos, faites par ce rendu-ci, dans ce canevas-ci, à la taille et la densité
+    // où la tasse vivante sera dessinée : le passage de l'image à la 3D ne se voit pas.
+    // Rend une image (data URL) par indice, ou undefined si le canevas n'a pas la place.
+    async snapshot(indices: number[], size: number): Promise<(string | undefined)[]> {
+      const none = () => indices.map(() => undefined)
+      if (!resting) return none()
+      const density = Math.min(window.devicePixelRatio || 1, quality.density)
+      // Les motifs d'abord : une image sans son motif serait fausse pour toujours.
+      await Promise.all(indices.map(i => entries[i] ? updateMask(entries[i], size * density / (2 * framing.halfHeight)) : undefined))
+      if (disposed) return none()
+      const { bounds, ok } = fit()
+      const pixels = Math.round(size * density)
+      if (!ok || bounds.width < size || bounds.height < size) return none()
+      const copy = document.createElement('canvas')
+      copy.width = copy.height = pixels
+      const context = copy.getContext('2d')
+      if (!context) return none()
+      renderer.setScissorTest(true)
+      // En haut à gauche du canevas, copié dans la même tâche : rien de tout cela ne s'affiche.
+      renderer.setViewport(0, bounds.height - size, size, size)
+      renderer.setScissor(0, bounds.height - size, size, size)
+      const urls = indices.map(i => {
+        const entry = entries[i]
+        if (!entry) return undefined
+        const live = { x: entry.x, y: entry.y, bx: entry.bx, by: entry.by }
+        entry.x = entry.bx = resting.x
+        entry.y = entry.by = resting.y
+        pose(entry, 0)
+        aimCamera(entry, 1)
+        renderer.clear()
+        renderer.render(entry.scene, entry.camera)
+        context.clearRect(0, 0, pixels, pixels)
+        context.drawImage(canvas, 0, 0, pixels, pixels, 0, 0, pixels, pixels)
+        Object.assign(entry, live)
+        pose(entry, 0)
+        return copy.toDataURL('image/png')
+      })
+      // Le canevas reprend ce qu'il montrait (rien, ou la tasse réveillée).
+      renderer.setScissorTest(false)
+      renderer.clear()
+      shown = []
+      invalidate()
+      return urls
+    },
     setElevation(value: number) {
       elevation = value
       invalidate()

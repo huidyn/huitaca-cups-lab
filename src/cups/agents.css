@@ -30,8 +30,11 @@
 .side-agent:focus-visible { outline: 2px solid var(--lab-text); outline-offset: -2px; }
 .side.is-collapsed .side-agent { justify-content: center; padding-inline: 0; }
 /* La boîte de la tasse est carrée et fixe : 3D ou 2D, la rangée garde la même hauteur. */
-.agent-cup { display: block; flex: none; width: var(--cup); height: var(--cup); }
-.agent-viewport, .flat-cup { display: block; width: 100%; height: 100%; }
+.agent-cup { position: relative; display: block; flex: none; width: var(--cup); height: var(--cup); }
+.agent-viewport { position: absolute; inset: 0; }
+.agent-still, .flat-cup { display: block; width: 100%; height: 100%; user-select: none; }
+/* La tasse vivante est dans le canevas, au même endroit : son image s'efface le temps du survol. */
+.agent-cup.is-live .agent-still, .agent-cup.is-live .flat-cup { visibility: hidden; }
 .agent-name { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 14px; font-weight: 500; }
 .flat-eyes { transform: translate(calc(var(--gx, 0) * 0.11px), calc(var(--gy, 0) * -0.1px)); transition: transform 0.12s ease-out; }
 @media (prefers-reduced-motion: reduce) { .flat-eyes { transition: none; } }

@@ -8,7 +8,11 @@ import { COST_BUDGET_MS } from './quality'
 import { createCupGallery } from './renderer'
 import { runScenario, SCENARIOS } from './bench'
 
-const gallery = vi.hoisted(() => ({ refresh: vi.fn(), setQuality: vi.fn(), dispose: vi.fn() }))
+const gallery = vi.hoisted(() => ({
+  refresh: vi.fn(), setQuality: vi.fn(), dispose: vi.fn(), wake: vi.fn(), rest: vi.fn(),
+  // Une image par tasse, dont l'adresse dit la taille demandée.
+  snapshot: vi.fn(async (indices: number[], size: number) => indices.map(i => `data:image/png;base64,${size}-${i}`))
+}))
 
 vi.mock('./renderer', async importOriginal => ({
   ...await importOriginal<typeof import('./renderer')>(),
@@ -77,7 +81,47 @@ describe('agents sidebar study', () => {
     // Les tasses à motif portent leur motif, pas une couleur.
     expect(views()[4]!.design?.id).toBe('seigaiha')
     expect(options().frame).toEqual(AVATAR_FRAME)
+    // Au repos, tout le monde regarde vers la droite.
+    expect(options().resting).toEqual({ x: 0.6, y: 0 })
     expect(root.querySelector('.side-canvas')?.classList.contains('is-hidden')).toBe(false)
+  })
+
+  it('shows still images made by the 3D renderer, at the chosen size, each made once', async () => {
+    await mount()
+    await vi.waitFor(() => expect(root.querySelectorAll('.agent-still')).toHaveLength(10))
+    expect(root.querySelectorAll('.flat-cup')).toHaveLength(0)
+    expect(root.querySelector('.agent-still')?.getAttribute('src')).toMatch(/32-\d+$/)
+    button('28 px').click()
+    await vi.waitFor(() => expect(root.querySelector('.agent-still')?.getAttribute('src')).toMatch(/28-\d+$/))
+    const asked = gallery.snapshot.mock.calls.length
+    button('32 px').click()
+    await vi.waitFor(() => expect(root.querySelector('.agent-still')?.getAttribute('src')).toMatch(/32-\d+$/))
+    expect(gallery.snapshot.mock.calls.length).toBe(asked)
+  })
+
+  it('brings only the hovered row to life, then hands it back to its image', async () => {
+    await mount()
+    await vi.waitFor(() => expect(root.querySelectorAll('.agent-still')).toHaveLength(10))
+    const agents = [...root.querySelectorAll<HTMLButtonElement>('.side-agent')]
+    const hover = (i: number, type = 'mouse') => agents[i]!.dispatchEvent(Object.assign(new Event('pointerenter'), { pointerType: type }))
+    hover(2)
+    expect(gallery.wake).toHaveBeenLastCalledWith(2)
+    options().onShown!([2])
+    await nextTick()
+    const cups = [...root.querySelectorAll('.agent-cup')]
+    expect(cups.map(cup => cup.classList.contains('is-live'))).toEqual(cups.map((_, i) => i === 2))
+    hover(3)
+    expect(gallery.rest).toHaveBeenLastCalledWith(2)
+    expect(gallery.wake).toHaveBeenLastCalledWith(3)
+    agents[3]!.dispatchEvent(new Event('pointerleave'))
+    expect(gallery.rest).toHaveBeenLastCalledWith(3)
+    options().onShown!([])
+    await nextTick()
+    expect(root.querySelectorAll('.agent-cup.is-live')).toHaveLength(0)
+    // Pas de survol au doigt.
+    gallery.wake.mockClear()
+    hover(4, 'touch')
+    expect(gallery.wake).not.toHaveBeenCalled()
   })
 
   it('sizes the cup box from the choice, and redraws when the list scrolls or the panel folds', async () => {
@@ -128,48 +172,12 @@ describe('agents sidebar study', () => {
     expect(root.textContent).toContain(`${stored.length} of ${AGENT_LOOK_MAX_BYTES} bytes`)
   })
 
-  it('swaps to static SVG cups with 2D eyes, without destroying the layout', async () => {
-    await mount()
-    button('Static, 2D eyes').click()
-    await vi.waitFor(() => expect(root.querySelectorAll('.flat-cup')).toHaveLength(10))
-    expect(gallery.dispose).toHaveBeenCalled()
-    expect(root.querySelector('.side-canvas')?.classList.contains('is-hidden')).toBe(true)
-    expect(root.querySelectorAll('.agent-viewport')).toHaveLength(0)
-    expect(root.querySelectorAll('.flat-cup .flat-eyes rect')).toHaveLength(20)
-    expect(root.querySelector('.flat-cup')?.getAttribute('viewBox')).toMatch(/^-?[\d.]+ -?[\d.]+ 3\.24 3\.24$/)
-    // Même boîte carrée que la 3D : la rangée ne change pas de hauteur.
-    expect(root.querySelectorAll('.side-agent .agent-cup')).toHaveLength(10)
-    expect(root.textContent).toContain('Static cups')
-    expect(button('High').disabled).toBe(true)
-  })
-
-  it('aims the 2D eyes at the cursor, one update per frame, and not at all when reduced', async () => {
-    await mount()
-    button('Static, 2D eyes').click()
-    await vi.waitFor(() => expect(root.querySelectorAll('.flat-cup')).toHaveLength(10))
-    const frames: FrameRequestCallback[] = []
-    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => frames.push(callback))
-    const first = root.querySelector<SVGElement>('.flat-cup')!
-    for (const x of [10, 400, 800]) window.dispatchEvent(Object.assign(new Event('pointermove'), { clientX: x, clientY: 0, pointerType: 'mouse' }))
-    expect(frames).toHaveLength(1)
-    frames[0]!(0)
-    expect(first.style.getPropertyValue('--gx')).not.toBe('')
-    expect(Math.abs(Number(first.style.getPropertyValue('--gx')))).toBeLessThanOrEqual(1)
-    frames.length = 0
-    media.matches = true
-    media.dispatchEvent(new Event('change'))
-    await nextTick()
-    window.dispatchEvent(Object.assign(new Event('pointermove'), { clientX: 5, clientY: 5, pointerType: 'mouse' }))
-    expect(frames).toHaveLength(0)
-  })
-
-  it('shows static cups and no canvas context with reduced motion', async () => {
+  it('keeps the cups as still images with reduced motion, even on hover', async () => {
     await mount(true)
-    expect(createCupGallery).not.toHaveBeenCalled()
-    expect(root.querySelectorAll('.flat-cup')).toHaveLength(10)
+    await vi.waitFor(() => expect(root.querySelectorAll('.agent-still')).toHaveLength(10))
     expect(root.textContent).toContain('Reduced motion is on')
-    expect(button('3D, shared canvas').disabled).toBe(true)
-    expect(root.querySelector('.side-canvas')?.classList.contains('is-hidden')).toBe(true)
+    root.querySelector('.side-agent')!.dispatchEvent(Object.assign(new Event('pointerenter'), { pointerType: 'mouse' }))
+    expect(gallery.wake).not.toHaveBeenCalled()
   })
 
   it('steps the render quality down while frames run over budget, then falls back to static cups', async () => {
@@ -187,9 +195,12 @@ describe('agents sidebar study', () => {
     feed()
     await vi.waitFor(() => expect(root.querySelectorAll('.flat-cup')).toHaveLength(10))
     expect(root.querySelector('[role="status"]')?.textContent).toContain('static cup')
-    // De retour en 3D, le juge repart de zéro.
-    button('3D, shared canvas').click()
-    await vi.waitFor(() => expect(root.querySelectorAll('.agent-viewport')).toHaveLength(10))
+    expect(gallery.dispose).toHaveBeenCalled()
+    expect(root.querySelectorAll('.agent-viewport, .agent-still')).toHaveLength(0)
+    expect(root.querySelector('.side-canvas')?.classList.contains('is-hidden')).toBe(true)
+    // Même boîte carrée : la rangée ne change pas de hauteur.
+    expect(root.querySelector('.flat-cup')?.getAttribute('viewBox')).toMatch(/^-?[\d.]+ -?[\d.]+ 3\.24 3\.24$/)
+    expect(button('High').disabled).toBe(true)
   })
 
   it('does not step down when asked not to, or when frames fit the budget', async () => {

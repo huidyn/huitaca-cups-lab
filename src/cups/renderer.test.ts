@@ -78,6 +78,47 @@ describe('on-demand cup renderer', () => {
     vi.unstubAllGlobals()
   })
 
+  it('in resting mode, draws nothing until a cup is woken, then only that cup, then hands it back', () => {
+    gallery.dispose()
+    const rows = [0, 1, 2].map(i => {
+      const element = document.createElement('div')
+      vi.spyOn(element, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, i * 40, 32, 32))
+      return { element, vessel: vessels[i]! }
+    })
+    const onShown = vi.fn()
+    gallery = createCupGallery(canvas, rows, { resting: { x: 0.6, y: 0 }, onShown })
+    step()
+    expect(canvas.dataset.frames).toBeUndefined()
+    // Le curseur bouge partout : personne n'est réveillé, donc rien à faire.
+    window.dispatchEvent(new PointerEvent('pointermove', { clientX: 10, clientY: 50, pointerType: 'mouse' }))
+    expect(queue.size).toBe(0)
+    gallery.wake(1)
+    step()
+    expect(canvas.dataset.frames).toBe('1')
+    expect(onShown).toHaveBeenLastCalledWith([1])
+    for (let i = 0; i < 100; i++) step()
+    gallery.rest(1)
+    for (let i = 0; i < 200 && queue.size; i++) step()
+    expect(queue.size).toBe(0)
+    expect(onShown).toHaveBeenLastCalledWith([])
+    const frames = canvas.dataset.frames
+    window.dispatchEvent(new PointerEvent('pointermove', { clientX: 300, clientY: 0, pointerType: 'mouse' }))
+    gallery.refresh()
+    step()
+    expect(canvas.dataset.frames).toBe(frames)
+  })
+
+  it('does not wake a cup with reduced motion', () => {
+    gallery.dispose()
+    media.matches = true
+    const onShown = vi.fn()
+    gallery = createCupGallery(canvas, [{ element: canvas, vessel: vessels[0]! }], { resting: { x: 0.6, y: 0 }, onShown })
+    gallery.wake(0)
+    step()
+    expect(onShown).not.toHaveBeenCalled()
+    expect(canvas.dataset.frames).toBeUndefined()
+  })
+
   it('draws once at rest, caps density at 2x, and leaves no idle callback', () => {
     step()
     expect(canvas.width).toBe(600)

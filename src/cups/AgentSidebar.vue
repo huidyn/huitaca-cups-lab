@@ -10,6 +10,11 @@ import { type BenchResult, deviceInfo, gpuName, runScenario, SCENARIOS, SLOWDOWN
 import type { createCupGallery } from './renderer'
 import './agents.css'
 
+// Au repos, les agents regardent vers la droite : vers la conversation, pas vers le curseur.
+const REST = { x: 0.6, y: 0 }
+// Images de repos déjà faites, pour toute la session (une page qui revient ne les refait pas).
+const STILLS: Record<string, string> = {}
+
 // Des agents d'exemple : ce que l'app a enregistré pour chacun, et son nom. Le reste de la liste
 // vient de `defaultAgentLook`, comme pour un agent qui n'a encore rien choisi.
 const ROSTER: { id: string; name: string; look: unknown }[] = [
@@ -28,7 +33,6 @@ const COUNTS = [5, 10, 20, 40]
 const SIZES = [24, 28, 32]
 const TIERS: Exclude<QualityId, 'static'>[] = ['high', 'balanced', 'low']
 
-const mode = ref<'3d' | '2d'>('3d')
 const size = ref(32)
 const count = ref(10)
 const collapsed = ref(false)
@@ -39,18 +43,27 @@ const notice = ref('')
 const reduced = ref(false)
 const fallback = ref(false)
 const frames = ref(0)
-// Sans WebGL, avec mouvement réduit, ou une fois le juge à bout : une image fixe, des yeux en 2D.
-const flat = computed(() => mode.value === '2d' || reduced.value || fallback.value)
+// Sans WebGL, ou une fois le juge à bout : les tasses SVG, sans canevas.
+const flat = computed(() => fallback.value)
 
 const rows = computed(() => Array.from({ length: count.value }, (_, i) => {
   const entry = ROSTER[i] ?? { id: `agent-${i + 1}`, name: `Agent ${i + 1}`, look: defaultAgentLook(`agent-${i + 1}`) }
   const look: AgentLook = normaliseAgentLook(entry.look).look
   const view = editorLook(toEditorChoice(look))
-  return { id: entry.id, name: entry.name, look, view, flat: flat.value ? flatCup(view.vessel, look.accessories[0], AVATAR_FRAME) : undefined }
+  return { id: entry.id, name: entry.name, look, key: serialiseAgentLook(look), view, flat: flatCup(view.vessel, look.accessories[0], AVATAR_FRAME) }
 }))
 const current = computed(() => rows.value.find(row => row.id === selected.value) ?? rows.value[0]!)
-const stored = computed(() => serialiseAgentLook(current.value.look))
+const stored = computed(() => current.value.key)
 const storedIssues = computed(() => normaliseAgentLook(JSON.parse(stored.value)).issues)
+
+// Images de repos : faites par le rendu 3D, une fois par apparence, taille et densité, gardées pour
+// la session (elles se déduisent de ce qui est enregistré : rien de plus à stocker).
+const density = computed(() => Math.min(window.devicePixelRatio || 1, QUALITY[tier.value].density))
+const stills = ref<Record<string, string>>({ ...STILLS })
+const stillKey = (row: { key: string }) => `${row.key}|${size.value}|${density.value}`
+const still = (row: { key: string }) => flat.value ? undefined : stills.value[stillKey(row)]
+// Les rangées dont la tasse est dessinée en 3D en ce moment (survolée, ou qui revient au repos).
+const live = ref(new Set<number>())
 
 const canvas = ref<HTMLCanvasElement>()
 const scroller = ref<HTMLElement>()
@@ -59,11 +72,13 @@ let governor = createGovernor()
 let disposed = false
 let media: MediaQueryList
 let observer: MutationObserver | undefined
+let hovered: number | undefined
 
 async function start() {
   gallery?.dispose()
   gallery = undefined
   frames.value = 0
+  live.value = new Set()
   if (flat.value) return
   await nextTick()
   try {
@@ -75,13 +90,15 @@ async function start() {
     })), {
       frame: AVATAR_FRAME,
       quality: tier.value,
+      resting: REST,
+      onShown: indices => { live.value = new Set(indices) },
       onFrame: sample => {
         if (!adaptive.value) return
         const next = governor.push(sample)
         if (!next) return
         if (next === 'static') {
           notice.value = 'Frames ran over budget at every level: switched to the static cup.'
-          mode.value = '2d'
+          fallback.value = true
         } else {
           notice.value = `Frames ran over budget: dropped to ${QUALITY[next].label.toLowerCase()}.`
           tier.value = next
@@ -89,50 +106,68 @@ async function start() {
         }
       }
     })
+    await photograph()
   } catch {
     fallback.value = true
   }
+}
+
+// Prend les images qui manquent, à la taille et la densité courantes.
+async function photograph() {
+  const target = gallery
+  if (!target) return
+  const missing = rows.value.flatMap((row, i) => stills.value[stillKey(row)] ? [] : [i])
+  if (!missing.length) return
+  const keys = missing.map(i => stillKey(rows.value[i]!))
+  const urls = await target.snapshot(missing, size.value)
+  if (target !== gallery) return
+  const next = { ...stills.value }
+  urls.forEach((url, i) => {
+    if (!url) return
+    next[keys[i]!] = url
+    STILLS[keys[i]!] = url
+  })
+  stills.value = next
+}
+
+// La 3D se prépare quand la page n'a rien d'autre à faire : la première image n'attend pas three.
+function soon(callback: () => void) {
+  const idle = (window as Window & { requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number }).requestIdleCallback
+  if (idle) idle(callback, { timeout: 800 })
+  else setTimeout(callback, 0)
 }
 
 watch([count, flat], () => { void start() })
 watch(tier, value => {
   governor = createGovernor({ start: value })
   gallery?.setQuality(value)
+  void photograph()
 })
 // Le panneau replié change la place des tasses sans changer leur taille : on redessine.
 watch([collapsed, size], async () => {
   await nextTick()
   gallery?.refresh()
+  void photograph()
 })
 
-// Yeux 2D : même règle que la 3D (le regard suit le curseur, borné), une seule mise à jour par image écran.
-let pointer: { x: number; y: number } | undefined
-let pending = 0
-function aim() {
-  pending = 0
-  if (!scroller.value) return
-  for (const element of scroller.value.querySelectorAll<HTMLElement>('.flat-cup')) {
-    const box = element.getBoundingClientRect()
-    const x = pointer ? Math.max(-1, Math.min(1, (pointer.x - box.left - box.width / 2) / 420)) : 0
-    const y = pointer ? Math.max(-1, Math.min(1, (box.top + box.height / 2 - pointer.y) / 300)) : 0
-    element.style.setProperty('--gx', x.toFixed(3))
-    element.style.setProperty('--gy', y.toFixed(3))
-  }
+// Survol : seule la rangée sous le curseur s'anime, et seulement une fois son image prête,
+// pour que le passage de l'image à la 3D tombe sur la même tasse, au même regard.
+function enter(event: PointerEvent, index: number) {
+  if (event.pointerType === 'touch' || reduced.value || !gallery || !still(rows.value[index]!)) return
+  if (hovered !== undefined && hovered !== index) gallery.rest(hovered)
+  hovered = index
+  gallery.wake(index)
 }
-function follow(event: PointerEvent) {
-  if (!flat.value || reduced.value || event.pointerType === 'touch') return
-  pointer = { x: event.clientX, y: event.clientY }
-  if (!pending) pending = requestAnimationFrame(aim)
+function exit(index: number) {
+  if (hovered === index) hovered = undefined
+  gallery?.rest(index)
 }
-function leave() {
-  pointer = undefined
-  if (flat.value && !pending) pending = requestAnimationFrame(aim)
-}
-// La liste défile sous un canevas fixe : il faut redessiner les tasses à leur nouvelle place.
+// La liste défile sous un canevas fixe : la tasse vivante doit suivre sa rangée.
 const scrolled = () => gallery?.refresh()
 
 function syncMotion() {
   reduced.value = media.matches
+  if (reduced.value && hovered !== undefined) exit(hovered)
 }
 
 // Mesures
@@ -164,20 +199,15 @@ onMounted(() => {
   media = matchMedia('(prefers-reduced-motion: reduce)')
   media.addEventListener('change', syncMotion)
   syncMotion()
-  window.addEventListener('pointermove', follow, { passive: true })
-  document.documentElement.addEventListener('pointerleave', leave)
   if (canvas.value) {
     observer = new MutationObserver(() => { frames.value = Number(canvas.value?.dataset.frames ?? 0) })
     observer.observe(canvas.value, { attributes: true, attributeFilter: ['data-frames'] })
   }
-  void start()
+  soon(() => { void start() })
 })
 onUnmounted(() => {
   disposed = true
   media?.removeEventListener('change', syncMotion)
-  window.removeEventListener('pointermove', follow)
-  document.documentElement.removeEventListener('pointerleave', leave)
-  cancelAnimationFrame(pending)
   observer?.disconnect()
   gallery?.dispose()
 })
@@ -204,16 +234,20 @@ onUnmounted(() => {
         <div class="side-list-wrap">
           <canvas ref="canvas" class="side-canvas" :class="{ 'is-hidden': flat }" aria-hidden="true" />
           <ul ref="scroller" class="side-list" @scroll.passive="scrolled">
-            <li v-for="row in rows" :key="row.id">
-              <button type="button" class="side-agent" :class="{ 'is-current': row.id === selected }" :aria-current="row.id === selected ? 'true' : undefined" :title="collapsed ? row.name : undefined" @click="selected = row.id">
-                <span class="agent-cup" aria-hidden="true">
-                  <svg v-if="row.flat" class="flat-cup" :viewBox="row.flat.box.join(' ')" focusable="false">
+            <li v-for="(row, index) in rows" :key="row.id">
+              <button
+                type="button" class="side-agent" :class="{ 'is-current': row.id === selected }" :aria-current="row.id === selected ? 'true' : undefined" :title="collapsed ? row.name : undefined"
+                @click="selected = row.id" @pointerenter="enter($event, index)" @pointerleave="exit(index)"
+              >
+                <span class="agent-cup" :class="{ 'is-live': live.has(index) }" aria-hidden="true">
+                  <span v-if="!flat" class="agent-viewport" />
+                  <img v-if="still(row)" class="agent-still" :src="still(row)" alt="" draggable="false" />
+                  <svg v-else class="flat-cup" :viewBox="row.flat.box.join(' ')" :style="{ '--gx': REST.x, '--gy': REST.y }" focusable="false">
                     <path v-for="(shape, i) in row.flat.shapes" :key="i" :d="shape.d" :fill="shape.fill" :stroke="shape.stroke" :stroke-width="shape.width" stroke-linejoin="round" />
                     <g class="flat-eyes">
                       <rect v-for="(eye, i) in row.flat.eyes" :key="i" :x="eye.x" :y="eye.y" :width="eye.width" :height="eye.height" :rx="eye.width / 2" :fill="eye.fill" />
                     </g>
                   </svg>
-                  <span v-else class="agent-viewport" />
                 </span>
                 <span v-if="!collapsed" class="agent-name">{{ row.name }}</span>
               </button>
@@ -225,20 +259,13 @@ onUnmounted(() => {
           <div class="side-account"><span class="sk sk-avatar" /><span v-if="!collapsed" class="side-org-text"><span class="sk sk-line" style="width: 88px" /><span class="sk sk-line sk-small" style="width: 120px" /></span></div>
         </div>
       </aside>
-      <p class="agents-caption">{{ flat ? 'Static cups · SVG, no canvas' : `One shared canvas · ${frames} frames drawn since it started` }}</p>
+      <p class="agents-caption">{{ flat ? 'Static cups · SVG, no canvas' : `Still images at rest · live 3D on hover · ${frames} frames drawn` }}</p>
     </div>
 
     <div class="agents-panel">
       <fieldset class="palette-picker editor-section">
         <legend>Display</legend>
         <div class="agents-controls">
-          <div class="agents-control" role="group" aria-label="Renderer">
-            <span>Renderer</span>
-            <div class="segment">
-              <button type="button" :aria-pressed="!flat" :disabled="reduced || fallback" @click="mode = '3d'; notice = ''; governor = createGovernor({ start: tier })">3D, shared canvas</button>
-              <button type="button" :aria-pressed="flat" @click="mode = '2d'">Static, 2D eyes</button>
-            </div>
-          </div>
           <div class="agents-control" role="group" aria-label="Cup size">
             <span>Cup</span>
             <div class="segment"><button v-for="value in SIZES" :key="value" type="button" :aria-pressed="size === value" @click="size = value">{{ value }} px</button></div>
@@ -259,7 +286,8 @@ onUnmounted(() => {
             <div class="segment"><button v-for="id in TIERS" :key="id" type="button" :aria-pressed="tier === id" :disabled="flat" @click="tier = id; notice = ''">{{ QUALITY[id].label }}</button></div>
           </div>
           <label class="agents-check"><input v-model="adaptive" type="checkbox" :disabled="flat" /> Step down by itself when frames run over budget</label>
-          <p v-if="reduced" class="agents-note">Reduced motion is on: cups are static and their eyes stay put.</p>
+          <p class="agents-note">At rest every agent is a still image of its own 3D cup, looking right. Hovering a row brings that one cup to life in the shared canvas; leaving lets it look back, then hands over to the image again. Nothing is drawn while the pointer is elsewhere.</p>
+          <p v-if="reduced" class="agents-note">Reduced motion is on: the cups stay still images, even on hover.</p>
           <p v-if="notice" class="agents-note" role="status">{{ notice }}</p>
         </div>
       </fieldset>

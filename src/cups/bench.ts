@@ -13,10 +13,12 @@ export interface Scenario {
   cups: number
   // Côté de chaque tasse, en pixels CSS.
   size: number
+  // Comme la barre latérale : les tasses au repos ne sont pas dessinées, seule celle sous le curseur vit.
+  resting?: boolean
 }
 export const SCENARIOS: Scenario[] = [
   { id: 'hero', label: 'One large cup', cups: 1, size: 320 },
-  { id: 'sidebar', label: 'Sidebar, 10 agents', cups: 10, size: 32 }
+  { id: 'sidebar', label: 'Sidebar, 10 agents, hovered one live', cups: 10, size: 32, resting: true }
 ]
 // Ralentissement simulé du processeur : l'image attend (k - 1) fois son propre coût.
 export const SLOWDOWNS = [1, 2, 4, 6]
@@ -87,6 +89,7 @@ export async function runScenario(scenario: Scenario, options: BenchOptions): Pr
   const gallery = createCupGallery(canvas, views, {
     quality: options.quality,
     frame: DEFAULT_FRAME,
+    resting: scenario.resting ? { x: 0.6, y: 0 } : undefined,
     onFrame: sample => {
       // Le ralentissement simulé s'ajoute au coût mesuré, et il fait réellement attendre l'image.
       if (options.slowdown > 1) {
@@ -103,13 +106,25 @@ export async function runScenario(scenario: Scenario, options: BenchOptions): Pr
     const cx = box.left + box.width / 2
     const cy = box.top + (scenario.cups * scenario.size) / 2
     const start = performance.now()
+    // En barre latérale, le curseur parcourt la colonne : la rangée qu'il survole se réveille.
+    const reach = scenario.resting ? (scenario.cups * scenario.size) / 2 - 1 : 260
+    let hovered: number | undefined
     await new Promise<void>(resolve => {
       const move = () => {
         const t = (performance.now() - start) / 1000
         if (t >= seconds) return resolve()
+        const clientY = cy + Math.sin(t * 3.1 + 1) * reach
         window.dispatchEvent(new PointerEvent('pointermove', {
-          pointerType: 'mouse', clientX: cx + Math.sin(t * 2.3) * 360, clientY: cy + Math.sin(t * 3.1 + 1) * 260
+          pointerType: 'mouse', clientX: cx + Math.sin(t * 2.3) * 360, clientY
         }))
+        if (scenario.resting) {
+          const row = Math.max(0, Math.min(scenario.cups - 1, Math.floor((clientY - box.top) / scenario.size)))
+          if (row !== hovered) {
+            if (hovered !== undefined) gallery.rest(hovered)
+            gallery.wake(row)
+            hovered = row
+          }
+        }
         requestAnimationFrame(move)
       }
       move()

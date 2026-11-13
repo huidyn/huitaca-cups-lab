@@ -24,7 +24,7 @@ const STUDIES: Record<Study, { number: string; label: string; eyebrow: string; t
   editor: { number: '05', label: 'Editor', eyebrow: 'STUDY 05 / EDITOR', title: 'Make it yours.', description: 'A shape, a colour or a pattern, and an accessory. Everything follows your cursor.' },
   expressions: { number: '06', label: 'Expressions', eyebrow: 'STUDY 06 / EXPRESSION', title: 'Two eyes say it all.', description: 'Sixteen expressions an agent can pick from, on the cup from your editor.' },
   personalities: { number: '07', label: 'Personalities', eyebrow: 'STUDY 07 / PERSONALITY', title: 'Same feeling, its own way.', description: 'The agent picks the expression. The personality decides how it is played.' },
-  sidebar: { number: '08', label: 'Sidebar', eyebrow: 'STUDY 08 / SIDEBAR', title: 'Agents, not chats.', description: 'A sidebar where every agent is a cup, at 24 to 32 px. Compare the shared 3D canvas with a static cup, and measure what each costs.' }
+  sidebar: { number: '08', label: 'Sidebar', eyebrow: 'STUDY 08 / SIDEBAR', title: 'Agents, not chats.', description: 'A sidebar where every agent is a cup, at 24 to 32 px. They rest as still images looking right, and only the one under the pointer comes to life in 3D. Measure what it costs.' }
 }
 // Une conversation jouée en boucle : écouter, réfléchir, répondre avec une expression.
 const EXCHANGES: { user: string; expression: ExpressionId; reply: string }[] = [

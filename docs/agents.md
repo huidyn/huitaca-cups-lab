@@ -2,30 +2,48 @@
 
 What the App needs from the lab before batch 4.2, and where each answer lives.
 
-## 1. The sidebar: 3D in one canvas, or a static cup?
+## 1. The sidebar: still images at rest, 3D on hover
 
-Both are built, on the same list, in the same box, so they can be compared by eye
-at 24, 28 and 32 px (`/cups`, study 08):
+Decided: **neither always-3D nor always-2D.** Every agent rests as a still image of its own
+3D cup, looking right (`REST = { x: 0.6, y: 0 }`, towards the conversation). Only the row
+under the pointer comes to life, in 3D. Nothing is drawn, and the pointer costs nothing,
+while it is anywhere else (`/cups`, study 08).
 
-- **3D, shared canvas.** One `<canvas>` over the scrolling list, one `.agent-viewport`
-  per row. Cups outside the visible list are skipped (`draw()` culls them), and the
-  list's `scroll` calls `gallery.refresh()`.
-- **Static, 2D eyes.** `cup2d.ts` draws the cup from the same outlines and colours as
-  an SVG, and the eyes follow the cursor with one CSS transform per animation frame.
-  No WebGL. Simpler accessories (a flat beret, an arc for headphones), no volume.
+How it works (`GalleryOptions.resting`, `renderer.ts`):
 
-Both use `AVATAR_FRAME` (`cup2d.ts`), so a row has the same height either way. The
-accessory frame of the editor leaves too much empty space at 32 px: the avatar frame
-fits the tallest cup with a hat or headphones (3.05 units) and nothing more.
+- **One WebGL context, kept.** It is made once, in idle time after the page appears
+  (`requestIdleCallback`), never per hover. Waking a row is a flag, not a new scene.
+- **The images come from the same renderer.** `gallery.snapshot(indices, size)` draws each
+  cup at its resting gaze in a corner of the shared canvas, at the size and pixel density the
+  live cup will be drawn at, and copies it out in the same task (so nothing shows). The
+  handover from image to 3D therefore lands on the same pixels. Patterns are rendered first:
+  an image without its pattern would be wrong for the whole session. Images are cached per
+  look, size and density for the session, and derived from what the agent stores, so the App
+  stores nothing more.
+- **Until they exist**, each row shows the flat SVG cup (`cup2d.ts`) with its eyes fixed to
+  the right: no three, no WebGL. It is also what remains without WebGL, and once the quality
+  governor gives up.
+- **Hover** (`pointerenter`, mouse or pen; not touch) calls `wake(i)`: that cup aims at the
+  pointer and is drawn. `onShown(indices)` fires in the same task as the frame that first
+  draws it, and the page hides that row's image then, so there is no flash.
+- **Leave** calls `rest(i)`: the cup eases back to its resting gaze; once it has settled it is
+  no longer drawn, `onShown` fires again and the image returns. The canvas is then empty and
+  stops drawing entirely.
+- **A cup at rest does not even read its box** on `pointermove`, and the canvas is only cleared
+  when something was on it: a still sidebar draws 0 frames.
+- **Reduced motion**: the images stay, hovering wakes nothing.
 
-The static cup is also what the user gets with `prefers-reduced-motion`, without
-WebGL, and when the quality governor gives up (see 2).
+The App will want one exception: an agent that is working (steam, expression) should be live
+without a hover. That is `wake(i)` without a pointer, and usually concerns one agent.
+
+All cups use `AVATAR_FRAME` (`cup2d.ts`), which fits the tallest cup with a hat or headphones
+(3.05 units) and nothing more: the editor's accessory frame leaves too much empty space at 32 px.
 
 ## 2. Performance while moving
 
 The page has a **Measure** button. It builds a throwaway gallery off screen, moves a
 synthetic cursor for 3 s, and reports, for *One large cup (320 px)* and *Sidebar, 10
-agents (32 px)*:
+agents (32 px)*, where the cursor sweeps the column and the row under it is woken, as on the page:
 
 - frames drawn, frames per second held, and CPU milliseconds per frame (mean, p95, max);
 - **idle frames**: frames drawn in the 2 s after the cursor stopped, which must be 0
@@ -49,7 +67,7 @@ weak GPU needs a real phone.
 | high | up to 2× | 60 |
 | balanced | up to 1.5× | 30 |
 | low | 1× | 20 |
-| static | no canvas | none: SVG cups, 2D eyes |
+| static | no canvas | none: SVG cups, eyes fixed to the right |
 
 `createGovernor()` takes the `onFrame` samples. Every 60 frames it judges the 95th
 percentile of CPU cost against `COST_BUDGET_MS` (6 ms) and the cadence actually held;
@@ -57,7 +75,8 @@ if the level is over, it steps one level down. It never climbs back up in a sess
 (no oscillation). The sidebar page wires it up and reports each step.
 
 Before measuring on a real machine, one number from Node (no GPU, no draw calls):
-updating the eyes of 10 cups costs about 0.23 ms per frame.
+updating the eyes of 10 cups costs about 0.23 ms per frame. With images at rest only one cup is
+updated and drawn at a time, so the sidebar costs about what one small cup costs.
 
 ## 3. What the App stores for an agent
 
