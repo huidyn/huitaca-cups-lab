@@ -21,11 +21,10 @@ export const QUALITY_ORDER: QualityId[] = ['high', 'balanced', 'low', 'static']
 // Point de départ d'après ce que l'appareil dit de lui-même. Ce n'est qu'un indice (les navigateurs
 // arrondissent ces valeurs, et certains les taisent) : c'est le juge, d'après les images réellement
 // dessinées, qui décide ensuite.
-export function suggestTier(device: { cores?: number; memoryGb?: number; saveData?: boolean }): Exclude<QualityId, 'static'> {
-  if (device.saveData) return 'low'
+export function suggestTier(device: { cores?: number; memoryGb?: number; saveData?: boolean }): 'high' | 'balanced' {
+  if (device.saveData) return 'balanced'
   const cores = device.cores || 8
   const memory = device.memoryGb || 8
-  if (cores <= 2 || memory <= 2) return 'low'
   if (cores <= 4 || memory <= 4) return 'balanced'
   return 'high'
 }
@@ -85,16 +84,17 @@ export function judge(summary: Summary, tier: QualityId, budget = COST_BUDGET_MS
 
 // Le niveau le plus haut qui tient, d'après une mesure faite au niveau le plus haut :
 // coût processeur trop fort, on descend ; on ne remonte pas dans la session (pas d'oscillation).
-export function createGovernor(options: { start?: QualityId; window?: number; budget?: number } = {}) {
+export function createGovernor(options: { start?: QualityId; floor?: QualityId; window?: number; budget?: number } = {}) {
   const size = options.window ?? 60
   const budget = options.budget ?? COST_BUDGET_MS
+  const floor = options.floor ?? 'static'
   let tier = options.start ?? 'high'
   let samples: Sample[] = []
   return {
     get tier() { return tier },
     // Rend le nouveau niveau quand il change, sinon rien.
     push(sample: Sample): QualityId | undefined {
-      if (tier === 'static') return undefined
+      if (tier === 'static' || QUALITY_ORDER.indexOf(tier) >= QUALITY_ORDER.indexOf(floor)) return undefined
       samples.push(sample)
       if (samples.length < size) return undefined
       const verdict = judge(summarise(samples), tier, budget)

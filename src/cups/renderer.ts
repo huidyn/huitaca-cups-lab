@@ -120,10 +120,51 @@ export function renderDesignMask(vessel: VesselDefinition, design: CupDesign, pi
   return rasterizeSvg(svg, size.width, size.height)
 }
 
+// Coordonnées entières d'un pixel en plein milieu de la panse (sous les yeux), pour comparer
+// à l'unité près ce que sortent le tampon WebGL, le canevas en direct et l'image de repos.
+export function cupBodyPixel(vessel: VesselDefinition, frame: CupFrame = DEFAULT_FRAME, pixels: number, elevation = DEFAULT_ELEVATION) {
+  const part = vessel.parts.find(p => p.id === vessel.face.surface) ?? vessel.parts[0]!
+  const ys = part.outline.map(point => point[1])
+  const minY = Math.min(...ys)
+  const eyeBottom = vessel.face.centerY - vessel.face.eyeHeight / 2
+  const sampleY = Math.max(minY + 0.15, eyeBottom - 0.18)
+  let radius = part.outline[0]![0]
+  for (let i = 1; i < part.outline.length; i++) {
+    const [r0, y0] = part.outline[i - 1]!
+    const [r1, y1] = part.outline[i]!
+    if ((sampleY >= y0 && sampleY <= y1) || (sampleY >= y1 && sampleY <= y0)) {
+      radius = y1 === y0 ? r1 : r0 + (r1 - r0) * (sampleY - y0) / (y1 - y0)
+      break
+    }
+  }
+  const angle = elevation * RADIANS
+  const wx = vessel.handle ? -0.18 : 0
+  const wy = sampleY - frame.lift
+  const camY = wy * Math.cos(angle) - radius * Math.sin(angle)
+  const ndcX = wx / frame.halfHeight
+  const ndcY = camY / frame.halfHeight
+  const x = Math.max(0, Math.min(pixels - 1, Math.floor((ndcX * 0.5 + 0.5) * pixels)))
+  const y = Math.max(0, Math.min(pixels - 1, Math.floor((-ndcY * 0.5 + 0.5) * pixels)))
+  return { x, y, glY: pixels - 1 - y }
+}
+
 export function createCupGallery(canvas: HTMLCanvasElement, views: CupView[], options: GalleryOptions = {}) {
-  const renderer = new WebGLRenderer({ canvas, antialias: true, alpha: true })
+  const resting = options.resting
+  // En mode repos, quand un contexte 2D sRGB est disponible sur le canevas de la page, WebGL dessine
+  // hors écran à (0, 0, pixels, pixels) et copie aussi bien les tasses vivantes que les images de repos
+  // par `gl.readPixels` et `putImageData` : même grille de pixels et même gestion des couleurs.
+  const surface = resting
+    ? (canvas.getContext('2d', { colorSpace: 'srgb', willReadFrequently: true }) ?? canvas.getContext('2d'))
+    : null
+  const glCanvas = surface ? document.createElement('canvas') : canvas
+  const renderer = new WebGLRenderer({ canvas: glCanvas, antialias: true, alpha: true })
   renderer.outputColorSpace = SRGBColorSpace
   renderer.setClearColor(0x000000, 0)
+  const gl = (renderer as { getContext?: () => (WebGLRenderingContext & { drawingBufferColorSpace?: string; unpackColorSpace?: string }) | null }).getContext?.() ?? undefined
+  if (gl) {
+    if ('drawingBufferColorSpace' in gl) gl.drawingBufferColorSpace = 'srgb'
+    if ('unpackColorSpace' in gl) gl.unpackColorSpace = 'srgb'
+  }
   const textureLimit = Math.min(2048, renderer.capabilities.maxTextureSize)
   const anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy())
   const turntable = options.turntable ?? false
@@ -158,7 +199,6 @@ export function createCupGallery(canvas: HTMLCanvasElement, views: CupView[], op
     }
     return { element, vessel, design, accessory, morph: undefined as Morphing | undefined, maskWidth: 0, maskReady: Promise.resolve(), awake: false, settled: true, acting: false, act: 0, steamLevel: 0, cup, scene, camera, steam, steamY: steam?.group.position.y ?? 0, x: 0, y: 0, bx: 0, by: 0, tx: 0, ty: 0 }
   })
-  const resting = options.resting
   let shown: number[] = []
   // Dernière position connue du curseur : une tasse réveillée vise là tout de suite.
   let last: { x: number; y: number } | undefined
@@ -305,9 +345,13 @@ export function createCupGallery(canvas: HTMLCanvasElement, views: CupView[], op
       const width = Math.round(host.width * density)
       const height = Math.round(host.height * density)
       if (!width || !height) return { bounds: host, density, ok: false }
-      if (renderer.getPixelRatio() !== density || canvas.width !== width || canvas.height !== height) {
+      if (renderer.getPixelRatio() !== density || canvas.width !== width || canvas.height !== height || glCanvas.width !== width || glCanvas.height !== height) {
         canvas.style.width = `${width / density}px`
         canvas.style.height = `${height / density}px`
+        if (surface) {
+          canvas.width = width
+          canvas.height = height
+        }
         renderer.setPixelRatio(density)
         // Un quart de pixel de marge : three arrondit vers le bas, et la division n'est pas exacte.
         renderer.setSize((width + 0.25) / density, (height + 0.25) / density, false)
@@ -325,11 +369,47 @@ export function createCupGallery(canvas: HTMLCanvasElement, views: CupView[], op
     return { bounds, density, ok: true }
   }
 
-  // Zone de dessin donnée en pixels d'écran entiers, depuis le coin haut gauche du canevas.
+  // Zone de dessin donnée en pixels d'écran entiers, depuis le coin haut gauche du canevas WebGL.
   function place(left: number, top: number, width: number, height: number, density: number) {
-    const at = [(left + 0.01) / density, (canvas.height - top - height + 0.01) / density, (width + 0.01) / density, (height + 0.01) / density] as const
+    const at = [(left + 0.01) / density, (glCanvas.height - top - height + 0.01) / density, (width + 0.01) / density, (height + 0.01) / density] as const
     renderer.setViewport(...at)
     renderer.setScissor(...at)
+  }
+
+  // Copie la vignette (0, 0, width, height) du tampon WebGL vers un contexte 2D sRGB via `gl.readPixels`.
+  function transferTile(target: CanvasRenderingContext2D, dx: number, dy: number, width: number, height: number) {
+    if (gl && typeof gl.readPixels === 'function' && typeof target.putImageData === 'function') {
+      const raw = new Uint8Array(width * height * 4)
+      gl.pixelStorei?.(gl.PACK_ALIGNMENT ?? 0x0cf5, 1)
+      gl.readPixels(0, glCanvas.height - height, width, height, gl.RGBA ?? 0x1908, gl.UNSIGNED_BYTE ?? 0x1401, raw)
+      const data = new Uint8ClampedArray(width * height * 4)
+      const stride = width * 4
+      for (let y = 0; y < height; y++) {
+        const src = (height - 1 - y) * stride
+        const dst = y * stride
+        for (let x = 0; x < stride; x += 4) {
+          const a = raw[src + x + 3]!
+          if (a === 255 || a === 0) {
+            data[dst + x] = raw[src + x]!
+            data[dst + x + 1] = raw[src + x + 1]!
+            data[dst + x + 2] = raw[src + x + 2]!
+            data[dst + x + 3] = a
+          } else {
+            data[dst + x] = Math.min(255, Math.round(raw[src + x]! * 255 / a))
+            data[dst + x + 1] = Math.min(255, Math.round(raw[src + x + 1]! * 255 / a))
+            data[dst + x + 2] = Math.min(255, Math.round(raw[src + x + 2]! * 255 / a))
+            data[dst + x + 3] = a
+          }
+        }
+      }
+      const image = typeof ImageData === 'function'
+        ? new ImageData(data, width, height)
+        : { data, width, height, colorSpace: 'srgb' as PredefinedColorSpace }
+      target.putImageData(image, dx, dy)
+      return
+    }
+    target.clearRect(dx, dy, width, height)
+    target.drawImage(glCanvas, 0, 0, width, height, dx, dy, width, height)
   }
 
   function aimCamera(entry: typeof entries[number], aspect: number) {
@@ -348,6 +428,7 @@ export function createCupGallery(canvas: HTMLCanvasElement, views: CupView[], op
     if (visible && !visible.length && !shown.length) return
     const { bounds, density, ok } = fit()
     if (!ok) return
+    if (surface) surface.clearRect(0, 0, canvas.width, canvas.height)
     renderer.setScissorTest(false)
     renderer.clear()
     renderer.setScissorTest(true)
@@ -357,17 +438,31 @@ export function createCupGallery(canvas: HTMLCanvasElement, views: CupView[], op
       if (!box.width || !box.height) continue
       // Hors du canevas (liste qui défile) : rien à dessiner, et pas de masque à calculer.
       if (box.bottom < bounds.top || box.top > bounds.bottom || box.right < bounds.left || box.left > bounds.right) continue
-      aimCamera(entry, box.width / box.height)
       if (resting) {
         // Arrondi comme le navigateur arrondit l'image de la même rangée : chacun depuis la page.
         const snap = (value: number) => Math.round(value * density)
-        place(snap(box.left) - snap(bounds.left), snap(box.top) - snap(bounds.top), snap(box.width), snap(box.height), density)
+        const left = snap(box.left) - snap(bounds.left)
+        const top = snap(box.top) - snap(bounds.top)
+        const width = snap(box.width)
+        const height = snap(box.height)
+        aimCamera(entry, 1)
+        void updateMask(entry, box.height * density / (2 * framing.halfHeight))
+        if (surface) {
+          place(0, 0, width, height, density)
+          renderer.clear()
+          renderer.render(entry.scene, entry.camera)
+          transferTile(surface, left, top, width, height)
+        } else {
+          place(left, top, width, height, density)
+          renderer.render(entry.scene, entry.camera)
+        }
       } else {
+        aimCamera(entry, box.width / box.height)
         renderer.setViewport(box.left - bounds.left, bounds.bottom - box.bottom, box.width, box.height)
         renderer.setScissor(box.left - bounds.left, bounds.bottom - box.bottom, box.width, box.height)
+        void updateMask(entry, box.height * density / (2 * framing.halfHeight))
+        renderer.render(entry.scene, entry.camera)
       }
-      void updateMask(entry, box.height * density / (2 * framing.halfHeight))
-      renderer.render(entry.scene, entry.camera)
     }
     frames++
     canvas.dataset.frames = String(frames)
@@ -383,15 +478,16 @@ export function createCupGallery(canvas: HTMLCanvasElement, views: CupView[], op
     frame = 0
     if (disposed || document.hidden) return
     // Cadence plafonnée : on rend la main sans dessiner, et le temps s'accumule dans le prochain dt.
-    const fps = resting && !entries.some(entry => entry.awake) ? Math.min(quality.maxFps, ACT_FPS) : quality.maxFps
-    if (previousTime && time - previousTime < 1000 / fps - 2) {
+    const throttled = Boolean(resting) && !entries.some(entry => entry.awake) && ACT_FPS < quality.maxFps
+    const fps = throttled ? ACT_FPS : quality.maxFps
+    if (previousTime && time - previousTime < 1000 / fps - 5) {
       invalidate()
       return
     }
     const started = options.onFrame ? performance.now() : 0
     const moving = step(time)
     if (options.onFrame) {
-      options.onFrame({ cost: performance.now() - started, interval: drawnAt ? time - drawnAt : 0 })
+      options.onFrame({ cost: performance.now() - started, interval: drawnAt && !throttled ? time - drawnAt : 0 })
       // Un intervalle ne compte que d'une image à la suivante, sans pause au repos.
       drawnAt = moving ? time : 0
     }
@@ -699,10 +795,10 @@ export function createCupGallery(canvas: HTMLCanvasElement, views: CupView[], op
       if (disposed) return none()
       const { ok } = fit()
       const pixels = Math.round(size * density)
-      if (!ok || canvas.width < pixels || canvas.height < pixels) return none()
+      if (!ok || glCanvas.width < pixels || glCanvas.height < pixels) return none()
       const copy = document.createElement('canvas')
       copy.width = copy.height = pixels
-      const context = copy.getContext('2d')
+      const context = copy.getContext('2d', { colorSpace: 'srgb', willReadFrequently: true }) ?? copy.getContext('2d')
       if (!context) return none()
       renderer.setScissorTest(true)
       // En haut à gauche du canevas, copié dans la même tâche : rien de tout cela ne s'affiche.
@@ -720,8 +816,7 @@ export function createCupGallery(canvas: HTMLCanvasElement, views: CupView[], op
         aimCamera(entry, 1)
         renderer.clear()
         renderer.render(entry.scene, entry.camera)
-        context.clearRect(0, 0, pixels, pixels)
-        context.drawImage(canvas, 0, 0, pixels, pixels, 0, 0, pixels, pixels)
+        transferTile(context, 0, 0, pixels, pixels)
         Object.assign(entry, live)
         if (entry.steam) entry.steam.group.visible = steaming
         // Une tasse qui joue reprend sa pose à l'image suivante (`invalidate` plus bas).

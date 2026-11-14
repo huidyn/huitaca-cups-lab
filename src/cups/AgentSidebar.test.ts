@@ -185,8 +185,9 @@ describe('agents sidebar study', () => {
     expect(gallery.wake).not.toHaveBeenCalled()
   })
 
-  it('steps the render quality down while frames run over budget, then falls back to static cups', async () => {
+  it('steps the render quality down from high to balanced at most, and falls back to static cups only without WebGL', async () => {
     await mount()
+    expect([...root.querySelectorAll('[aria-label="Quality"] button')].map(item => item.textContent?.trim())).toEqual(['High', 'Balanced'])
     const over = { cost: COST_BUDGET_MS * 3, interval: 16.7 }
     const feed = () => { for (let i = 0; i < 60; i++) options().onFrame!(over) }
     feed()
@@ -194,16 +195,21 @@ describe('agents sidebar study', () => {
     expect(gallery.setQuality).toHaveBeenLastCalledWith('balanced')
     expect(button('Balanced').getAttribute('aria-pressed')).toBe('true')
     expect(root.querySelector('[role="status"]')?.textContent).toContain('dropped to balanced')
+    gallery.setQuality.mockClear()
+    feed()
     feed()
     await nextTick()
-    expect(gallery.setQuality).toHaveBeenLastCalledWith('low')
-    feed()
-    await vi.waitFor(() => expect(root.querySelectorAll('.flat-cup')).toHaveLength(40))
-    expect(root.querySelector('[role="status"]')?.textContent).toContain('static cup')
-    expect(gallery.dispose).toHaveBeenCalled()
+    expect(gallery.setQuality).not.toHaveBeenCalled()
+    expect(button('Balanced').getAttribute('aria-pressed')).toBe('true')
+    // Sans WebGL : repli sur les tasses SVG statiques dans la même boîte carrée.
+    app.unmount()
+    root.innerHTML = ''
+    vi.mocked(createCupGallery).mockImplementationOnce(() => { throw new Error('no webgl') })
+    app = createApp(AgentSidebar)
+    app.mount(root)
+    await vi.waitFor(() => expect(root.querySelector('.side-canvas')?.classList.contains('is-hidden')).toBe(true))
+    expect(root.querySelectorAll('.flat-cup')).toHaveLength(40)
     expect(root.querySelectorAll('.agent-viewport, .agent-still')).toHaveLength(0)
-    expect(root.querySelector('.side-canvas')?.classList.contains('is-hidden')).toBe(true)
-    // Même boîte carrée : la rangée ne change pas de hauteur.
     expect(root.querySelector('.flat-cup')?.getAttribute('viewBox')).toMatch(/^-?[\d.]+ -?[\d.]+ 3\.24 3\.24$/)
     expect(button('High').disabled).toBe(true)
   })
@@ -216,9 +222,32 @@ describe('agents sidebar study', () => {
     await nextTick()
     for (let i = 0; i < 120; i++) options().onFrame!({ cost: 40, interval: 16.7 })
     expect(gallery.setQuality).not.toHaveBeenCalled()
-    button('Low').click()
+    button('Balanced').click()
     await nextTick()
-    expect(gallery.setQuality).toHaveBeenCalledWith('low')
+    expect(gallery.setQuality).toHaveBeenCalledWith('balanced')
+  })
+
+  it('stays on balanced when picked manually, without switching to low automatically', async () => {
+    await mount()
+    button('Balanced').click()
+    await nextTick()
+    expect(button('Balanced').getAttribute('aria-pressed')).toBe('true')
+    expect(root.querySelector<HTMLInputElement>('.agents-check input')?.checked).toBe(false)
+    expect(gallery.setQuality).toHaveBeenLastCalledWith('balanced')
+    gallery.setQuality.mockClear()
+    for (let i = 0; i < 180; i++) options().onFrame!({ cost: COST_BUDGET_MS * 3, interval: 50 })
+    await nextTick()
+    expect(gallery.setQuality).not.toHaveBeenCalled()
+    expect(button('Balanced').getAttribute('aria-pressed')).toBe('true')
+    // Même après un rechargement, le choix explicite reste sur Balanced sans redescendre tout seul.
+    app.unmount()
+    root.innerHTML = ''
+    await mount()
+    expect(button('Balanced').getAttribute('aria-pressed')).toBe('true')
+    expect(root.querySelector<HTMLInputElement>('.agents-check input')?.checked).toBe(false)
+    for (let i = 0; i < 180; i++) options().onFrame!({ cost: COST_BUDGET_MS * 3, interval: 50 })
+    await nextTick()
+    expect(button('Balanced').getAttribute('aria-pressed')).toBe('true')
   })
 
   it('measures the large cup and the sidebar, at the chosen quality and CPU slowdown', async () => {

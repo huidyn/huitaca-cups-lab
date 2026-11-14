@@ -5,7 +5,7 @@ import {
 } from './agent-look'
 import { AVATAR_FRAME, flatCup } from './cup2d'
 import { editorLook } from './editor'
-import { createGovernor, lowerTier, QUALITY, type QualityId, suggestTier } from './quality'
+import { createGovernor, lowerTier, QUALITY, suggestTier } from './quality'
 import { createPerformer, type Performer } from './personality'
 import { STEAM } from './steam'
 import { type BenchResult, deviceInfo, gpuName, runScenario, SCENARIOS, SLOWDOWNS } from './bench'
@@ -22,11 +22,12 @@ const SCROLL_REST_MS = 160
 const STILL_BATCH = 8
 // Le niveau où le juge s'est arrêté, retenu d'une visite à l'autre : on ne refait pas la descente.
 const TIER_KEY = 'cups.quality'
-type Tier = Exclude<QualityId, 'static'>
+const LOCKED_KEY = 'cups.quality.locked'
+type Tier = 'high' | 'balanced'
 function rememberedTier(): Tier | undefined {
   try {
     const value = localStorage.getItem(TIER_KEY)
-    return value === 'high' || value === 'balanced' || value === 'low' ? value : undefined
+    return value === 'high' || value === 'balanced' ? value : undefined
   } catch {
     return undefined
   }
@@ -35,6 +36,19 @@ function rememberTier(value: Tier) {
   try {
     localStorage.setItem(TIER_KEY, value)
   } catch { /* stockage refusé : on redescendra à la prochaine visite */ }
+}
+function rememberedLocked(): boolean {
+  try {
+    return localStorage.getItem(LOCKED_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+function rememberLocked(locked: boolean) {
+  try {
+    if (locked) localStorage.setItem(LOCKED_KEY, '1')
+    else localStorage.removeItem(LOCKED_KEY)
+  } catch { /* stockage refusé */ }
 }
 // Une graine par agent, tirée de son identifiant : deux agents ne jouent jamais la même partition.
 function seedOf(id: string) {
@@ -77,7 +91,7 @@ const ROSTER: { id: string; name: string; look: unknown }[] = [
 ]
 const COUNTS = [10, 20, 40]
 const SIZES = [24, 28, 32]
-const TIERS: Exclude<QualityId, 'static'>[] = ['high', 'balanced', 'low']
+const TIERS: Tier[] = ['high', 'balanced']
 
 const size = ref(32)
 const count = ref(40)
@@ -162,10 +176,18 @@ const phase = (index: number) => ((index * 0.618) % 1 * 3).toFixed(2)
 const canvas = ref<HTMLCanvasElement>()
 const scroller = ref<HTMLElement>()
 let gallery: ReturnType<typeof createCupGallery> | undefined
-let governor = createGovernor()
+let governor = createGovernor({ floor: 'balanced' })
 let disposed = false
 let media: MediaQueryList
 let observer: MutationObserver | undefined
+
+function chooseTier(id: Tier) {
+  adaptive.value = false
+  rememberLocked(true)
+  tier.value = id
+  rememberTier(id)
+  notice.value = ''
+}
 
 async function start() {
   gallery?.dispose()
@@ -193,15 +215,10 @@ async function start() {
       onFrame: sample => {
         if (!adaptive.value) return
         const next = governor.push(sample)
-        if (!next) return
-        if (next === 'static') {
-          notice.value = 'Frames ran over budget at every level: switched to the static cup.'
-          fallback.value = true
-        } else {
-          notice.value = `Frames ran over budget: dropped to ${QUALITY[next].label.toLowerCase()}.`
-          tier.value = next
-          gallery?.setQuality(next)
-        }
+        if (next !== 'balanced') return
+        notice.value = `Frames ran over budget: dropped to ${QUALITY[next].label.toLowerCase()}.`
+        tier.value = next
+        gallery?.setQuality(next)
       }
     })
     cast()
@@ -245,7 +262,7 @@ function soon(callback: () => void) {
 
 watch([count, flat], () => { void start() })
 watch(tier, value => {
-  governor = createGovernor({ start: value })
+  governor = createGovernor({ start: value, floor: 'balanced' })
   gallery?.setQuality(value)
   rememberTier(value)
   void photograph()
@@ -329,11 +346,16 @@ onMounted(() => {
     observer = new MutationObserver(() => { frames.value = Number(canvas.value?.dataset.frames ?? 0) })
     observer.observe(canvas.value, { attributes: true, attributeFilter: ['data-frames'] })
   }
-  // Indice de départ : ce que l'appareil dit de lui-même, sans dépasser le niveau retenu la dernière fois.
+  // Indice de départ : si l'utilisateur a choisi son niveau, on le garde ; sinon ce que l'appareil dit de lui-même.
   const nav = navigator as Navigator & { deviceMemory?: number; connection?: { saveData?: boolean } }
   const hint = suggestTier({ cores: nav.hardwareConcurrency, memoryGb: nav.deviceMemory, saveData: nav.connection?.saveData })
   const remembered = rememberedTier()
-  tier.value = remembered ? lowerTier(hint, remembered) : hint
+  if (remembered && rememberedLocked()) {
+    adaptive.value = false
+    tier.value = remembered
+  } else {
+    tier.value = remembered ? lowerTier(hint, remembered) : hint
+  }
   soon(() => { void start() })
 })
 onUnmounted(() => {
@@ -423,9 +445,9 @@ onUnmounted(() => {
           </div>
           <div class="agents-control" role="group" aria-label="Quality">
             <span>Quality</span>
-            <div class="segment"><button v-for="id in TIERS" :key="id" type="button" :aria-pressed="tier === id" :disabled="flat" @click="tier = id; notice = ''">{{ QUALITY[id].label }}</button></div>
+            <div class="segment"><button v-for="id in TIERS" :key="id" type="button" :aria-pressed="tier === id" :disabled="flat" @click="chooseTier(id)">{{ QUALITY[id].label }}</button></div>
           </div>
-          <label class="agents-check"><input v-model="adaptive" type="checkbox" :disabled="flat" /> Step down by itself when frames run over budget</label>
+          <label class="agents-check"><input v-model="adaptive" type="checkbox" :disabled="flat" @change="rememberLocked(!adaptive)" /> Step down by itself when frames run over budget</label>
           <p class="agents-note">At rest every agent is a still image of its own 3D cup, looking right. Hovering a row brings that one cup to life in the shared canvas; leaving lets it look back, then hands over to the image again. Nothing is drawn while nobody thinks and the pointer is elsewhere.</p>
           <p class="agents-note">Thinking shows as a light steam drawn over the image. Only two cups can be live with their own personality and real steam: the agent that is open (click one) and the one under the pointer. While the list scrolls, everything is an image.</p>
           <p v-if="reduced" class="agents-note">Reduced motion is on: the cups stay still images, even on hover.</p>

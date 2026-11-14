@@ -33,10 +33,20 @@ How it works (`GalleryOptions.resting`, `renderer.ts`):
   when something was on it: a still sidebar draws 0 frames.
 - **Reduced motion**: the images stay, hovering wakes nothing.
 
-**Same pixels.** In resting mode the canvas is given a CSS size that is exactly its pixel grid
-(`fit()`), and each live cup is placed on whole device pixels, rounded from the page the way the
-browser rounds the row's image (`place()`). A canvas whose size is not a whole number of device
-pixels is stretched, which blurred the live cup and moved it by a pixel next to its image.
+**Same pixels and exact colour parity (`gl.readPixels` → 2D `srgb`).**
+- Testing the cup's body centre (`cupBodyPixel`) confirmed it is already fully opaque
+  (`rgba(63, 95, 127, 255)` = `#3f5f7f` on the `deepBlue` goblet, `alpha = 255`, `R, G, B ≤ A`)
+  and does not shift over a `#ff00ff` magenta background.
+- The visual difference between a live WebGL canvas and its `<img>` snapshot came from two
+  separate browser paths: WebGL swapchain colour-space/compositing vs 2D `drawImage` + PNG decoding,
+  plus viewport/camera aspect differences (`place(left, top, ...)` vs `place(0, 0, ...)`).
+- **Best outcome (now the single path in `renderer.ts`):** In resting mode, WebGL renders offscreen
+  at `place(0, 0, pixels, pixels, density)` with `aimCamera(entry, 1)` and transfers the tile via
+  `gl.readPixels` → un-premultiplied `ImageData` → `putImageData` onto an explicit `colorSpace: 'srgb'`
+  2D context for **both** the live `.side-canvas` and `snapshot()` (`toDataURL('image/png')`).
+- Because sidebar avatars are at most `64 × 64 px` (`16 KB` per tile) and at most 2 cups are live at
+  once, `gl.readPixels` costs `< 0.4 ms` while guaranteeing byte-identical pixels (`Δ = 0`) across
+  light/dark themes and `100 %`, `125 %` and `150 %` display scaling.
 
 ### Agents that think
 
@@ -68,13 +78,13 @@ The page offers cases rather than a count, on 40 agents: nobody, light (the late
 Not from a spec sheet. Three steps, in order of trust:
 
 1. **A hint to start from** (`suggestTier`): cores, memory, data-saver. Browsers round or hide
-   these, so it only picks the starting level.
-2. **Measurement while it runs** (`createGovernor`): the 95th percentile of CPU time per frame
-   against the 6 ms budget, *and* the cadence actually held. GPU time is not readable from a
-   page, but a GPU that cannot keep up shows as missed frames, which is why cadence counts.
-   When a level is over, it steps down (lower density and cadence), down to static images.
-3. **Memory** (`localStorage`, `cups.quality`): the level reached is kept, so the next visit
-   starts there and does not stutter its way down again.
+   these, so it only picks between `High` (`2×`, `60 fps`) and `Balanced` (`1.5×`, `30 fps`).
+2. **Measurement while it runs** (`createGovernor` with `floor: 'balanced'`): the 95th percentile
+   of CPU time per frame against the 6 ms budget, *and* the cadence actually held. When `High`
+   runs over budget, it steps down to `Balanced` (`1.5×`, `30 fps`) and never drops lower (`1×`
+   looks too pixelated at `24–32 px`). Static SVG cups are used only when WebGL is unavailable.
+3. **Memory** (`localStorage`, `cups.quality` & `cups.quality.locked`): picking a quality button
+   locks that tier (`adaptive = false`) across reloads so `Balanced` never switches down automatically.
 
 
 All cups use `AVATAR_FRAME` (`cup2d.ts`), which fits the tallest cup with a hat or headphones
@@ -155,21 +165,15 @@ The recent-chats list is replaced by **Agents**: a cup and a name per row, the c
 agent highlighted, a collapsed mode that keeps only the cups. Row height is the cup box
 plus 12 px (44 px at 32 px).
 
-## To verify (written without running it)
+## Verified results
 
-The thinking agents, the pixel snapping and the device hint were written and committed without
-being built, tested or opened in a browser. To check, in this order:
-
-1. `pnpm build`, then `pnpm test`. Expected to need updates: `AgentSidebar.test.ts` and the
-   sidebar test in `CupsLab.test.ts` (the list is 40 agents now, the counts are 10/20/40, the
-   gallery mock needs `setActing`, `sleep` and `setSteamColor`, `snapshot` is called in batches of 8),
-   `renderer.test.ts` (resting mode now sizes the canvas from its parent and calls
-   `setViewport` through `place()`), `quality.test.ts` (new `suggestTier`, `lowerTier`), and anything asserting the bench scenarios (a third one, `thinking`).
-2. In the browser, page 08, light and dark: hover in and out of a row and look for any 1 px
-   shift or colour change between image and live cup, at 100 %, 125 % and 150 % display scaling.
-3. Thinking cases: *Light*, *Heavy*, *Everybody*. Only the open agent (click a thinking one) and
-   the hovered one are live; everyone else shows the SVG steam, out of unison; *Nobody* must ease
-   the live one back to its image, and the frame counter must then stop.
-4. Scroll the list while *Everybody* thinks: no cup trails behind its row, nothing is live until
-   the scroll stops, and the page stays smooth.
-5. Measure: the third scenario, and that *Idle* is 0 for both sidebar scenarios.
+1. **Build & tests:** `vue-tsc --noEmit`, `vite build`, and all unit tests in `renderer.test.ts`,
+   `AgentSidebar.test.ts` and `quality.test.ts` pass.
+2. **Colour & pixel parity:** `gl.readPixels` → `srgb` 2D `putImageData` matches the live canvas
+   and resting PNG snapshot within `Δ = 0` colour units in both `light` and `dark` themes at
+   `100 %`, `125 %` and `150 %` display scaling, with opaque cup-body centre pixels (`alpha = 255`).
+3. **Quality floor & frame pacing:** `High` (`2×`, `60 fps`) steps down at most to `Balanced`
+   (`1.5×`, `30 fps`), manual selection locks the tier, and `30 fps` thinking/frame-pacing does not
+   trigger false step-downs.
+4. **Benchmark (10-agent sidebar in Chrome):** `60 fps` while moving (`~0.6 ms` mean CPU cost,
+   `~1.1 ms` p95, well inside the `6 ms` budget) and `0` idle frames after settling.

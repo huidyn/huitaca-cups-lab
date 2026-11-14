@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { COST_BUDGET_MS, createGovernor, judge, QUALITY, QUALITY_ORDER, type Sample, summarise } from './quality'
+import { COST_BUDGET_MS, createGovernor, judge, QUALITY, QUALITY_ORDER, type Sample, suggestTier, summarise } from './quality'
 
 const frames = (count: number, cost: number, interval = 16.7): Sample[] => Array.from({ length: count }, () => ({ cost, interval }))
 
@@ -61,5 +61,19 @@ describe('render quality', () => {
     const governor = createGovernor({ window: 30 })
     for (let i = 0; i < 29; i++) expect(governor.push({ cost: 100, interval: 16.7 })).toBeUndefined()
     expect(governor.push({ cost: 100, interval: 16.7 })).toBe('balanced')
+  })
+
+  it('respects a floor tier and suggests balanced as the minimum device tier', () => {
+    expect(suggestTier({ cores: 1, memoryGb: 1, saveData: true })).toBe('balanced')
+    expect(suggestTier({ cores: 4, memoryGb: 4 })).toBe('balanced')
+    expect(suggestTier({ cores: 8, memoryGb: 8 })).toBe('high')
+    const governor = createGovernor({ window: 10, floor: 'balanced' })
+    const changes: string[] = []
+    for (let i = 0; i < 60; i++) {
+      const next = governor.push({ cost: COST_BUDGET_MS * 3, interval: 50 })
+      if (next) changes.push(next)
+    }
+    expect(changes).toEqual(['balanced'])
+    expect(governor.tier).toBe('balanced')
   })
 })
